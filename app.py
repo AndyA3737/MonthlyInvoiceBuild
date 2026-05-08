@@ -335,8 +335,15 @@ def xero_contacts():
                 headers=_xero_headers(),
                 params={"page": page, "includeArchived": "false"},
             )
-            r.raise_for_status()
-            batch = r.json().get("Contacts", [])
+            if not r.ok:
+                return jsonify({"error": f"Xero {r.status_code}: {r.text[:400]}"}), 500
+            if not r.text.strip():
+                return jsonify({"error": f"Xero returned empty body (status {r.status_code})"}), 500
+            try:
+                payload = r.json()
+            except ValueError:
+                return jsonify({"error": f"Xero non-JSON (status {r.status_code}): {r.text[:400]}"}), 500
+            batch = payload.get("Contacts", [])
             all_contacts.extend(
                 {"id": c["ContactID"], "name": c["Name"]}
                 for c in batch if c.get("ContactStatus") == "ACTIVE"
