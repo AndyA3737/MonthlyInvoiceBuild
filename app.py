@@ -3,6 +3,7 @@
 
 import os
 import base64
+import json
 import secrets
 import time
 from calendar import monthrange
@@ -40,9 +41,35 @@ XERO_TOKEN_URL       = "https://identity.xero.com/connect/token"
 XERO_API_BASE        = "https://api.xero.com/api.xro/2.0"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 
-# In-memory state — fine for a single-user admin tool on one Heroku dyno
+# Token persistence — survives restarts when a Railway Volume is mounted at /data
+# Set XERO_TOKEN_FILE env var to override (default: /data/xero_tokens.json)
+TOKEN_FILE = os.environ.get('XERO_TOKEN_FILE', '/data/xero_tokens.json')
+
 _xero_state  = None   # CSRF token for OAuth flow
 _xero_tokens = {}     # access_token, refresh_token, expires_at, tenant_id, tenant_name
+
+
+def _load_tokens():
+    """Read persisted tokens from disk on startup."""
+    try:
+        with open(TOKEN_FILE) as f:
+            _xero_tokens.update(json.load(f))
+        app.logger.info("Loaded Xero tokens from %s", TOKEN_FILE)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass  # No saved tokens yet — user will connect via UI
+
+
+def _save_tokens():
+    """Write current tokens to disk so they survive restarts."""
+    try:
+        os.makedirs(os.path.dirname(TOKEN_FILE), exist_ok=True)
+        with open(TOKEN_FILE, 'w') as f:
+            json.dump(dict(_xero_tokens), f)
+    except OSError as e:
+        app.logger.warning("Could not save Xero tokens to %s: %s", TOKEN_FILE, e)
+
+
+_load_tokens()
 
 
 # ── Basic auth ───────────────────────────────────────────────────────────────
@@ -134,6 +161,7 @@ def _xero_refresh_if_needed():
     _xero_tokens['access_token']  = t['access_token']
     _xero_tokens['refresh_token'] = t.get('refresh_token', rt)
     _xero_tokens['expires_at']    = time.time() + t.get('expires_in', 1800)
+    _save_tokens()
 
 
 def _xero_headers():
@@ -329,6 +357,8 @@ def auth_xero_callback():
             _xero_tokens['tenant_id']   = connections[0]['tenantId']
             _xero_tokens['tenant_name'] = connections[0]['tenantName']
 
+        _save_tokens()
+
     except Exception as e:
         app.logger.exception("Xero OAuth callback failed")
         return redirect('/?xero_error=' + quote(str(e)))
@@ -353,6 +383,10 @@ def xero_status():
 @require_auth
 def xero_disconnect():
     _xero_tokens.clear()
+    try:
+        os.remove(TOKEN_FILE)
+    except OSError:
+        pass
     return jsonify({"success": True})
 
 
