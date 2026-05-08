@@ -283,7 +283,7 @@ def auth_xero():
         "response_type": "code",
         "client_id":     XERO_CLIENT_ID,
         "redirect_uri":  XERO_REDIRECT_URI,
-        "scope": "openid offline_access accounting.transactions accounting.contacts",
+        "scope": "openid offline_access accounting.transactions",
         "state": _xero_state,
     }
     return redirect(XERO_AUTH_URL + "?" + urlencode(params))
