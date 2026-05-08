@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monthly Invoice Builder · SalonIQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --navy:   #1C2B3A;
+    --teal:   #00B5A4;
+    --teal-d: #008F81;
+    --bg:     #F2F5F8;
+    --card:   #FFFFFF;
+    --border: #E2E8EF;
+    --text:   #1C2B3A;
+    --muted:  #64748B;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; margin: 0; }
+
+  table { border-collapse: collapse; width: 100%; }
+  thead th {
+    position: sticky; top: 0; z-index: 10;
+    background: #F8FAFC; border-bottom: 2px solid var(--border);
+    white-space: nowrap; color: var(--muted); font-weight: 600;
+    padding: 10px 14px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:hover td { background: #F0FAF9; }
+  tbody td { padding: 9px 14px; font-size: 13px; white-space: nowrap; color: var(--text); }
+
+  input, select {
+    background: #fff; border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 14px; font-family: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--teal); outline-offset: 0; border-color: var(--teal); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: none; border-radius: 8px; padding: 9px 20px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, opacity 0.15s; font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn-teal   { background: var(--teal); color: #fff; }
+  .btn-teal:hover:not(:disabled)   { background: var(--teal-d); }
+  .btn-navy   { background: var(--navy); color: #fff; }
+  .btn-navy:hover:not(:disabled)   { background: #243547; }
+  .btn-outline { background: transparent; color: var(--teal); border: 1.5px solid var(--teal); }
+  .btn-outline:hover:not(:disabled) { background: #E8FAF8; }
+  .btn-danger  { background: transparent; color: #DC2626; border: 1.5px solid #FECACA; }
+  .btn-danger:hover:not(:disabled)  { background: #FEF2F2; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  }
+  .badge-connected    { background: #D1FAF5; color: #007A6D; }
+  .badge-disconnected { background: #F1F5F9; color: var(--muted); }
+  .badge-expired      { background: #FEF9C3; color: #854D0E; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    padding: 13px 20px; border-radius: 10px; font-size: 14px; font-weight: 500;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.15); max-width: 420px; line-height: 1.4;
+    transition: opacity 0.3s;
+  }
+  .toast-success { background: #D1FAF5; color: #007A6D; border: 1px solid #A7F3EC; }
+  .toast-error   { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+  .toast-info    { background: var(--navy); color: #E2E8F0; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--border);
+    border-top-color: var(--teal); border-radius: 50%;
+    animation: spin 0.75s linear infinite; margin: 0 auto 16px;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #F2F5F8; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header style="background: var(--navy); padding: 14px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+  <div style="display: flex; align-items: center; gap: 12px;">
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <rect width="34" height="34" rx="9" fill="#00B5A4"/>
+      <text x="8" y="25" font-size="20" font-weight="800" fill="white" font-family="Arial, sans-serif">S</text>
+    </svg>
+    <div>
+      <div style="color:#fff; font-weight:700; font-size:16px; line-height:1.2;">SalonIQ</div>
+      <div style="color:#94A3B8; font-size:11px; letter-spacing:0.04em;">MONTHLY INVOICE BUILDER</div>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="badge badge-disconnected" id="xeroBadge">
+      <span class="dot"></span>
+      <span id="xeroBadgeText">Xero: Not Connected</span>
+    </span>
+    <button class="btn btn-teal"    id="xeroConnectBtn"    onclick="connectXero()"    style="padding:7px 14px; font-size:13px;">Connect Xero</button>
+    <button class="btn btn-danger"  id="xeroDisconnectBtn" onclick="disconnectXero()" style="padding:7px 14px; font-size:13px; display:none;">Disconnect</button>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────────────────────── -->
+<main style="max-width:1500px; margin:0 auto; padding:28px 32px;">
+
+  <!-- Controls card -->
+  <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:24px;">
+    <h2 style="margin:0 0 20px; font-size:17px; font-weight:700; color:var(--navy);">Select Invoice Period</h2>
+    <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;">
+      <div>
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;">Month</label>
+        <select id="monthSelect" style="min-width:150px;">
+          <option value="1">January</option>
+          <option value="2">February</option>
+          <option value="3">March</option>
+          <option value="4">April</option>
+          <option value="5">May</option>
+          <option value="6">June</option>
+          <option value="7">July</option>
+          <option value="8">August</option>
+          <option value="9">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;">Year</label>
+        <select id="yearSelect" style="min-width:100px;"></select>
+      </div>
+      <button class="btn btn-teal" id="loadBtn" onclick="loadInvoices()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+        Load Invoices
+      </button>
+      <button class="btn btn-navy" id="exportBtn" onclick="exportToXero()" disabled style="margin-left:auto;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Export to Xero
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div id="loadingState" style="display:none; text-align:center; padding:72px 32px;">
+    <div class="spinner"></div>
+    <div id="loadingText" style="color:var(--muted); font-size:14px;">Fetching invoices from SalonIQ...</div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="emptyState" style="text-align:center; padding:72px 32px; color:var(--muted);">
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 auto 16px; display:block; opacity:0.35;">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/>
+    </svg>
+    <div style="font-size:16px; font-weight:600; margin-bottom:8px; color:var(--navy);">No invoices loaded</div>
+    <div style="font-size:14px;">Select a month and year above, then click <strong>Load Invoices</strong></div>
+  </div>
+
+  <!-- Results card -->
+  <div id="resultsCard" style="display:none; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+    <div style="padding:14px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-size:15px; font-weight:700; color:var(--navy);" id="resultsTitle">Invoices</div>
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="font-size:13px; color:var(--muted);" id="resultsCount"></div>
+        <div style="font-size:13px; font-weight:600; color:var(--teal);" id="resultsTotal"></div>
+      </div>
+    </div>
+    <div style="overflow-x:auto; max-height:580px; overflow-y:auto;">
+      <table id="invoiceTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast" class="toast" style="display:none;"></div>
+
+<script>
+let currentData = [];
+
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
+
+// ── Initialise selectors ─────────────────────────────────────────────────────
+
+function initSelectors() {
+  const yearSel = document.getElementById('yearSelect');
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  for (let y = currentYear + 1; y >= 2020; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    yearSel.appendChild(opt);
+  }
+  // Default to the previous calendar month
+  const prevMonthVal = now.getMonth() || 12;          // getMonth() 0-based → 1-based previous
+  const prevYear = now.getMonth() === 0 ? currentYear - 1 : currentYear;
+  document.getElementById('monthSelect').value = prevMonthVal;
+  yearSel.value = prevYear;
+}
+
+// ── Xero status ──────────────────────────────────────────────────────────────
+
+async function checkXeroStatus() {
+  try {
+    const res = await fetch('/api/xero/status');
+    const data = await res.json();
+    updateXeroUI(data);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('xero') === 'connected') {
+      showToast('Successfully connected to Xero: ' + (data.tenant || ''), 'success');
+      window.history.replaceState({}, '', '/');
+    }
+    const xeroErr = params.get('xero_error');
+    if (xeroErr) {
+      showToast('Xero connection failed: ' + decodeURIComponent(xeroErr), 'error');
+      window.history.replaceState({}, '', '/');
+    }
+  } catch (e) {
+    console.error('Xero status check failed', e);
+  }
+}
+
+function updateXeroUI(status) {
+  const badge          = document.getElementById('xeroBadge');
+  const badgeText      = document.getElementById('xeroBadgeText');
+  const connectBtn     = document.getElementById('xeroConnectBtn');
+  const disconnectBtn  = document.getElementById('xeroDisconnectBtn');
+
+  if (status.connected && !status.expired) {
+    badge.className    = 'badge badge-connected';
+    badgeText.textContent = 'Xero: ' + status.tenant;
+    connectBtn.style.display    = 'none';
+    disconnectBtn.style.display = '';
+  } else if (status.connected && status.expired) {
+    badge.className    = 'badge badge-expired';
+    badgeText.textContent = 'Xero: Token Expired';
+    connectBtn.style.display    = '';
+    disconnectBtn.style.display = '';
+  } else {
+    badge.className    = 'badge badge-disconnected';
+    badgeText.textContent = 'Xero: Not Connected';
+    connectBtn.style.display    = '';
+    disconnectBtn.style.display = 'none';
+  }
+
+  const exportBtn = document.getElementById('exportBtn');
+  exportBtn.disabled = !(status.connected && !status.expired && currentData.length > 0);
+}
+
+// ── Load invoices ────────────────────────────────────────────────────────────
+
+async function loadInvoices() {
+  const month = document.getElementById('monthSelect').value;
+  const year  = document.getElementById('yearSelect').value;
+  const btn   = document.getElementById('loadBtn');
+
+  btn.disabled = true;
+  showLoading('Fetching invoices from SalonIQ LIVE…');
+
+  try {
+    const res  = await fetch(`/api/invoices?month=${month}&year=${year}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to fetch invoices');
+
+    currentData = data.data || [];
+    renderGrid(currentData, parseInt(month), parseInt(year));
+    checkXeroStatus();
+
+    if (currentData.length === 0) {
+      showEmpty();
+      showToast('No invoices found for the selected period', 'info');
+    } else {
+      showToast(`Loaded ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''}`, 'success');
+    }
+  } catch (e) {
+    showEmpty();
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    hideLoading();
+  }
+}
+
+// ── Render grid ──────────────────────────────────────────────────────────────
+
+function renderGrid(rows, month, year) {
+  if (!rows || rows.length === 0) { showEmpty(); return; }
+
+  document.getElementById('resultsTitle').textContent =
+    MONTH_NAMES[month - 1] + ' ' + year + ' — Stripe Invoices';
+  document.getElementById('resultsCount').textContent =
+    rows.length + ' record' + (rows.length !== 1 ? 's' : '');
+
+  // Attempt to show a total if an amount column is detectable
+  const amountKey = Object.keys(rows[0]).find(k =>
+    /amount|total|value|price/i.test(k)
+  );
+  if (amountKey) {
+    const sum = rows.reduce((acc, r) => acc + (parseFloat(String(r[amountKey]).replace(',','')) || 0), 0);
+    document.getElementById('resultsTotal').textContent = 'Total: ' + formatCurrency(sum);
+  } else {
+    document.getElementById('resultsTotal').textContent = '';
+  }
+
+  const cols = Object.keys(rows[0]);
+  const thead = document.getElementById('tableHead');
+  const tbody = document.getElementById('tableBody');
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+
+  const headerRow = document.createElement('tr');
+  cols.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+
+  const fragment = document.createDocumentFragment();
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    cols.forEach(col => {
+      const td = document.createElement('td');
+      const v  = row[col];
+      td.textContent = (v !== null && v !== undefined) ? v : '';
+      tr.appendChild(td);
+    });
+    fragment.appendChild(tr);
+  });
+  tbody.appendChild(fragment);
+
+  document.getElementById('resultsCard').style.display  = '';
+  document.getElementById('emptyState').style.display   = 'none';
+  document.getElementById('loadingState').style.display = 'none';
+}
+
+function formatCurrency(n) {
+  if (isNaN(n)) return '';
+  return '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── Xero actions ─────────────────────────────────────────────────────────────
+
+function connectXero() {
+  window.location.href = '/auth/xero';
+}
+
+async function disconnectXero() {
+  if (!confirm('Disconnect from Xero? You will need to reconnect to export invoices.')) return;
+  try {
+    await fetch('/api/xero/disconnect', { method: 'POST' });
+    updateXeroUI({ connected: false });
+    showToast('Disconnected from Xero', 'info');
+  } catch (e) {
+    showToast('Disconnect failed: ' + e.message, 'error');
+  }
+}
+
+async function exportToXero() {
+  if (currentData.length === 0) { showToast('No invoices to export', 'error'); return; }
+
+  if (!confirm(`Export ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''} to Xero as DRAFT invoices?`)) return;
+
+  const btn = document.getElementById('exportBtn');
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;"></span> Exporting…';
+
+  try {
+    const res  = await fetch('/api/xero/export', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ invoices: currentData }),
+    });
+    const data = await res.json();
+
+    if (res.status === 207) {
+      showToast(
+        `Partial export: ${data.created} created. Errors: ${(data.errors || []).join(' | ')}`,
+        'error'
+      );
+    } else if (data.success) {
+      showToast(
+        `Successfully exported ${data.created} invoice${data.created !== 1 ? 's' : ''} to Xero as DRAFT`,
+        'success'
+      );
+    } else {
+      throw new Error(data.error || 'Export failed');
+    }
+  } catch (e) {
+    showToast('Export failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+    checkXeroStatus();
+  }
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text || 'Loading…';
+  document.getElementById('loadingState').style.display = '';
+  document.getElementById('emptyState').style.display   = 'none';
+  document.getElementById('resultsCard').style.display  = 'none';
+}
+
+function hideLoading() {
+  document.getElementById('loadingState').style.display = 'none';
+}
+
+function showEmpty() {
+  document.getElementById('emptyState').style.display   = '';
+  document.getElementById('resultsCard').style.display  = 'none';
+  document.getElementById('loadingState').style.display = 'none';
+}
+
+let _toastTimer;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.className      = 'toast toast-' + type;
+  t.textContent    = msg;
+  t.style.display  = '';
+  t.style.opacity  = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => { t.style.display = 'none'; }, 320);
+  }, 5000);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+initSelectors();
+checkXeroStatus();
+</script>
+</body>
+</html>
