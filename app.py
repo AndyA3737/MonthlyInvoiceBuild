@@ -333,7 +333,7 @@ def xero_contacts():
             r = requests.get(
                 f"{XERO_API_BASE}/Contacts",
                 headers=_xero_headers(),
-                params={"page": page, "includeArchived": "false", "summaryOnly": "true"},
+                params={"page": page, "includeArchived": "false"},
             )
             r.raise_for_status()
             batch = r.json().get("Contacts", [])
