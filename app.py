@@ -194,6 +194,7 @@ def _xero_headers():
         "Authorization":  f"Bearer {_xero_tokens['access_token']}",
         "Xero-tenant-id": _xero_tokens.get('tenant_id', ''),
         "Content-Type":   "application/json",
+        "Accept":         "application/json",
     }
 
 
