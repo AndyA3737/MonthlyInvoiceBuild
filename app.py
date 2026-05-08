@@ -184,48 +184,27 @@ def _parse_amount(val):
 
 
 def map_to_xero_invoice(row):
-    """Map a SalonIQ StripeInvoices row to a Xero invoice dict.
+    """Map a SalonIQ StripeInvoices row to a Xero invoice dict."""
+    # SALONNAME is the individual salon; fall back to TENANTNAME if missing
+    contact = str(row.get('SALONNAME') or row.get('TENANTNAME') or "Unknown Customer")
 
-    Field names are guessed from common Stripe/SalonIQ export patterns.
-    Adjust the candidate key lists below once you know your actual field names.
-    """
-    contact = str(_get(row,
-        'SalonName', 'CustomerName', 'ClientName', 'CompanyName',
-        'Name', 'BusinessName', 'AccountName', 'Customer',
-        default="Unknown Customer",
-    ))
+    # INVOICEDATE format from LIVE API: "4/30/2026 12:00:00 AM"
+    inv_date = _parse_date(row.get('INVOICEDATE', ''))
 
-    inv_date = _parse_date(_get(row,
-        'InvoiceDate', 'Date', 'Created', 'DateCreated',
-        'BillingDate', 'PeriodStart', 'IssueDate',
-    ))
-    due_date = _parse_date(_get(row,
-        'DueDate', 'Due', 'PaymentDue', 'DueAt',
-    )) or inv_date
+    # TOTALBILL is already in pounds (e.g. 311.8000)
+    try:
+        amount = round(float(str(row.get('TOTALBILL', '0')).replace(',', '')), 2)
+    except (ValueError, TypeError):
+        amount = 0.0
 
-    description = str(_get(row,
-        'Description', 'ServiceDescription', 'LineItem', 'Product',
-        'PlanName', 'SubscriptionPlan', 'Desc',
-        default="SalonIQ Subscription",
-    ))
-
-    inv_number = str(_get(row,
-        'InvoiceNumber', 'InvoiceID', 'StripeInvoiceID',
-        'Reference', 'Ref', 'Number', 'ID',
-        default="",
-    ))
-
-    amount = _parse_amount(_get(row,
-        'AmountDue', 'Amount', 'Total', 'AmountPaid',
-        'InvoiceAmount', 'Value', 'NetAmount', 'GrossAmount',
-        default="0",
-    ))
+    # ACCOUNTCODE (e.g. ABS003) used as the Xero invoice reference
+    reference = str(row.get('ACCOUNTCODE', ''))
 
     xero_inv = {
         "Type": "ACCREC",
         "Contact": {"Name": contact},
         "LineItems": [{
-            "Description": description,
+            "Description": "SalonIQ Monthly Subscription",
             "Quantity":    1.0,
             "UnitAmount":  amount,
             "AccountCode": XERO_ACCOUNT_CODE,
@@ -234,11 +213,10 @@ def map_to_xero_invoice(row):
         "Status": "DRAFT",
     }
     if inv_date:
-        xero_inv["Date"] = inv_date
-    if due_date:
-        xero_inv["DueDate"] = due_date
-    if inv_number:
-        xero_inv["InvoiceNumber"] = inv_number
+        xero_inv["Date"]    = inv_date
+        xero_inv["DueDate"] = inv_date
+    if reference:
+        xero_inv["Reference"] = reference
 
     return xero_inv
 
