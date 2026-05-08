@@ -43,10 +43,13 @@ XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 
 # Token persistence — survives restarts when a Railway Volume is mounted at /data
 # Set XERO_TOKEN_FILE env var to override (default: /data/xero_tokens.json)
-TOKEN_FILE = os.environ.get('XERO_TOKEN_FILE', '/data/xero_tokens.json')
+TOKEN_FILE   = os.environ.get('XERO_TOKEN_FILE',   '/data/xero_tokens.json')
+MAPPING_FILE = os.environ.get('XERO_MAPPING_FILE', '/data/salon_mapping.json')
 
-_xero_state  = None   # CSRF token for OAuth flow
-_xero_tokens = {}     # access_token, refresh_token, expires_at, tenant_id, tenant_name
+_xero_state    = None   # CSRF token for OAuth flow
+_xero_tokens   = {}     # access_token, refresh_token, expires_at, tenant_id, tenant_name
+# ACCOUNTCODE -> {salonName, xeroContactId, xeroContactName}
+_salon_mapping = {}
 
 
 def _load_tokens():
@@ -70,6 +73,27 @@ def _save_tokens():
 
 
 _load_tokens()
+
+
+def _load_mapping():
+    try:
+        with open(MAPPING_FILE) as f:
+            _salon_mapping.update(json.load(f))
+        app.logger.info("Loaded salon mapping from %s", MAPPING_FILE)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+
+
+def _save_mapping_file():
+    try:
+        os.makedirs(os.path.dirname(MAPPING_FILE), exist_ok=True)
+        with open(MAPPING_FILE, 'w') as f:
+            json.dump(dict(_salon_mapping), f, indent=2)
+    except OSError as e:
+        app.logger.warning("Could not save mapping to %s: %s", MAPPING_FILE, e)
+
+
+_load_mapping()
 
 
 # ── Basic auth ───────────────────────────────────────────────────────────────
@@ -213,8 +237,13 @@ def _parse_amount(val):
 
 def map_to_xero_invoice(row):
     """Map a SalonIQ StripeInvoices row to a Xero invoice dict."""
-    # SALONNAME is the individual salon; fall back to TENANTNAME if missing
-    contact = str(row.get('SALONNAME') or row.get('TENANTNAME') or "Unknown Customer")
+    account_code = str(row.get('ACCOUNTCODE', ''))
+    mapped = _salon_mapping.get(account_code)
+
+    if mapped and mapped.get('xeroContactId'):
+        contact = {"ContactID": mapped['xeroContactId'], "Name": mapped['xeroContactName']}
+    else:
+        contact = {"Name": str(row.get('SALONNAME') or row.get('TENANTNAME') or "Unknown Customer")}
 
     # INVOICEDATE format from LIVE API: "4/30/2026 12:00:00 AM"
     inv_date = _parse_date(row.get('INVOICEDATE', ''))
@@ -272,29 +301,71 @@ def api_invoices():
     try:
         sd, ed = month_date_range(month, year)
         rows = fetch("XXX_Export_Admin_TUBR_StripeInvoices", sd, ed)
+
+        # Register any new salons in the mapping (without Xero contact yet)
+        changed = False
+        for row in rows:
+            code = row.get('ACCOUNTCODE', '')
+            if code and code not in _salon_mapping:
+                _salon_mapping[code] = {
+                    "salonName":        row.get('SALONNAME') or row.get('TENANTNAME') or code,
+                    "xeroContactId":    None,
+                    "xeroContactName":  None,
+                }
+                changed = True
+        if changed:
+            _save_mapping_file()
+
         return jsonify({"data": rows, "count": len(rows)})
     except Exception as e:
         app.logger.exception("Error fetching invoices")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/debug/xero-url')
+@app.route('/api/xero/contacts')
 @require_auth
-def debug_xero_url():
-    """Temporary debug route — shows the exact Xero auth URL without redirecting."""
-    params = {
-        "response_type": "code",
-        "client_id":     XERO_CLIENT_ID,
-        "redirect_uri":  XERO_REDIRECT_URI,
-        "scope":         "openid offline_access accounting.transactions",
-        "state":         "debug",
-    }
-    url = XERO_AUTH_URL + "?" + urlencode(params)
-    return (
-        f"<pre>CLIENT_ID:    {XERO_CLIENT_ID}\n"
-        f"REDIRECT_URI: {XERO_REDIRECT_URI}\n\n"
-        f"Full URL:\n{url}</pre>"
-    )
+def xero_contacts():
+    if not _xero_tokens.get('access_token'):
+        return jsonify({"error": "Not connected to Xero"}), 401
+    try:
+        all_contacts, page = [], 1
+        while True:
+            r = requests.get(
+                f"{XERO_API_BASE}/Contacts",
+                headers=_xero_headers(),
+                params={"page": page, "includeArchived": "false", "summaryOnly": "true"},
+            )
+            r.raise_for_status()
+            batch = r.json().get("Contacts", [])
+            all_contacts.extend(
+                {"id": c["ContactID"], "name": c["Name"]}
+                for c in batch if c.get("ContactStatus") == "ACTIVE"
+            )
+            if len(batch) < 100:
+                break
+            page += 1
+        all_contacts.sort(key=lambda c: c["name"].lower())
+        return jsonify({"contacts": all_contacts})
+    except Exception as e:
+        app.logger.exception("Failed to fetch Xero contacts")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/mapping', methods=['GET'])
+@require_auth
+def get_mapping():
+    return jsonify(_salon_mapping)
+
+
+@app.route('/api/mapping', methods=['POST'])
+@require_auth
+def save_mapping():
+    data = request.get_json(silent=True) or {}
+    _salon_mapping.clear()
+    _salon_mapping.update(data)
+    _save_mapping_file()
+    mapped = sum(1 for v in _salon_mapping.values() if v.get('xeroContactId'))
+    return jsonify({"success": True, "total": len(_salon_mapping), "mapped": mapped})
 
 
 @app.route('/auth/xero')
