@@ -272,6 +272,25 @@ def api_invoices():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/debug/xero-url')
+@require_auth
+def debug_xero_url():
+    """Temporary debug route — shows the exact Xero auth URL without redirecting."""
+    params = {
+        "response_type": "code",
+        "client_id":     XERO_CLIENT_ID,
+        "redirect_uri":  XERO_REDIRECT_URI,
+        "scope":         "openid offline_access accounting.transactions",
+        "state":         "debug",
+    }
+    url = XERO_AUTH_URL + "?" + urlencode(params)
+    return (
+        f"<pre>CLIENT_ID:    {XERO_CLIENT_ID}\n"
+        f"REDIRECT_URI: {XERO_REDIRECT_URI}\n\n"
+        f"Full URL:\n{url}</pre>"
+    )
+
+
 @app.route('/auth/xero')
 @require_auth
 def auth_xero():
