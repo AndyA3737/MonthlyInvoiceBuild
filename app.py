@@ -327,7 +327,7 @@ def api_invoices():
 @require_auth
 def xero_contacts():
     if not _xero_tokens.get('access_token'):
-        return jsonify({"error": "Not connected to Xero"}), 401
+        return jsonify({"error": "Not connected to Xero — please click Connect Xero"}), 403
     try:
         all_contacts, page = [], 1
         while True:
@@ -494,7 +494,7 @@ def xero_disconnect():
 @require_auth
 def xero_export():
     if not _xero_tokens.get('access_token'):
-        return jsonify({"error": "Not connected to Xero. Please connect first."}), 401
+        return jsonify({"error": "Not connected to Xero — please click Connect Xero"}), 403
 
     body = request.get_json(silent=True) or {}
     invoices = body.get('invoices', [])
