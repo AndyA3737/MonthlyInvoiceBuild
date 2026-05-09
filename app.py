@@ -270,8 +270,7 @@ def map_to_xero_invoice(row, item_code=None):
             "Description": "SalonIQ Monthly Subscription",
             "Quantity":    1.0,
             "UnitAmount":  amount,
-            "ItemCode": item_code,
-            "TaxType":     "NONE",
+            "ItemCode":    item_code,
         }],
         "Status": "DRAFT",
     }
