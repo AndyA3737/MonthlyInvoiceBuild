@@ -236,9 +236,9 @@ def _parse_amount(val):
     return amount
 
 
-def map_to_xero_invoice(row, account_code=None):
+def map_to_xero_invoice(row, item_code=None):
     """Map a SalonIQ StripeInvoices row to a Xero invoice dict."""
-    account_code = account_code or XERO_ACCOUNT_CODE
+    item_code = item_code or XERO_ACCOUNT_CODE
     # Use salonid (UUID) as the stable mapping key; fall back to AccountCode
     salon_key = str(row.get('salonid') or row.get('SalonId') or
                     row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
@@ -270,7 +270,7 @@ def map_to_xero_invoice(row, account_code=None):
             "Description": "SalonIQ Monthly Subscription",
             "Quantity":    1.0,
             "UnitAmount":  amount,
-            "AccountCode": account_code,
+            "ItemCode": item_code,
             "TaxType":     "NONE",
         }],
         "Status": "DRAFT",
@@ -507,12 +507,12 @@ def xero_export():
 
     body = request.get_json(silent=True) or {}
     invoices = body.get('invoices', [])
-    account_code_override = str(body.get('accountCode', '') or XERO_ACCOUNT_CODE).strip()
+    item_code = str(body.get('accountCode', '') or XERO_ACCOUNT_CODE).strip()
     if not invoices:
         return jsonify({"error": "No invoices provided"}), 400
 
     try:
-        xero_invs = [map_to_xero_invoice(row, account_code_override) for row in invoices]
+        xero_invs = [map_to_xero_invoice(row, item_code) for row in invoices]
         created_total = 0
         errors = []
         BATCH_SIZE = 50
