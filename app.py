@@ -273,7 +273,6 @@ def map_to_xero_invoice(row, item_code=None):
             "Quantity":    1.0,
             "UnitAmount":  amount,
             "ItemCode":    item_code,
-            "TaxType":     "OUTPUT",
         }],
         "Status": "DRAFT",
     }
