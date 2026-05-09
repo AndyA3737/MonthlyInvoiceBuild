@@ -275,11 +275,14 @@ def map_to_xero_invoice(row, item_code=None):
         line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": "IQPayTerminal"})
 
     xero_inv = {
-        "Type": "ACCREC",
+        "Type":    "ACCREC",
         "Contact": contact,
         "LineItems": line_items,
-        "Status": "DRAFT",
+        "Status":  "DRAFT",
     }
+    currency = _salon_mapping.get(salon_key, {}).get('xeroContactCurrency', '')
+    if currency:
+        xero_inv["CurrencyCode"] = currency
     if inv_date:
         xero_inv["Date"]    = inv_date
         xero_inv["DueDate"] = inv_date
@@ -359,7 +362,11 @@ def xero_contacts():
                 return jsonify({"error": f"Xero non-JSON (status {r.status_code}): {r.text[:400]}"}), 500
             batch = payload.get("Contacts", [])
             all_contacts.extend(
-                {"id": c["ContactID"], "name": c["Name"]}
+                {
+                    "id":       c["ContactID"],
+                    "name":     c["Name"],
+                    "currency": c.get("DefaultCurrency", ""),
+                }
                 for c in batch if c.get("ContactStatus") == "ACTIVE"
             )
             if len(batch) < 100:

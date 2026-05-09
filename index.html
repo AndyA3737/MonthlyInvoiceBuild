@@ -475,7 +475,7 @@ async function loadXeroContacts() {
 function buildContactOptions() {
   let opts = '<option value="">— Not Mapped —</option>';
   xeroContacts.forEach(c => {
-    opts += `<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)}</option>`;
+    opts += `<option value="${esc(c.id)}" data-name="${esc(c.name)}" data-currency="${esc(c.currency || '')}">${esc(c.name)}</option>`;
   });
   return opts;
 }
@@ -545,8 +545,9 @@ function onMappingChange(sel) {
   const opt  = sel.options[sel.selectedIndex];
   savedMapping[code] = {
     ...savedMapping[code],
-    xeroContactId:   sel.value || null,
-    xeroContactName: sel.value ? opt.textContent : null,
+    xeroContactId:       sel.value || null,
+    xeroContactName:     sel.value ? opt.textContent : null,
+    xeroContactCurrency: sel.value ? (opt.dataset.currency || '') : null,
   };
   const cell = sel.closest('tr').querySelector('.status-cell');
   cell.innerHTML = sel.value
