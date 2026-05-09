@@ -254,9 +254,11 @@ def map_to_xero_invoice(row, item_code=None):
     # InvoiceDate format from LIVE API: "4/30/2026 12:00:00 AM"
     inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
-    # TotalBill is already in pounds (e.g. 311.8000)
+    # TotalBill is VAT-inclusive; divide by 1.2 to get the net amount for Xero
+    # (Xero then adds 20% OUTPUT tax to arrive back at the original inclusive total)
     try:
-        amount = round(float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', '')), 2)
+        gross = float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', ''))
+        amount = round(gross / 1.2, 2)
     except (ValueError, TypeError):
         amount = 0.0
 
@@ -264,8 +266,7 @@ def map_to_xero_invoice(row, item_code=None):
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
     xero_inv = {
-        "Type":            "ACCREC",
-        "LineAmountTypes": "INCLUSIVE",
+        "Type": "ACCREC",
         "Contact": contact,
         "LineItems": [{
             "Description": "SalonIQ Monthly Subscription",
