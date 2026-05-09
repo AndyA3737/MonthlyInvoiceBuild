@@ -377,7 +377,11 @@ function renderGrid(rows, month, year) {
   const frag = document.createDocumentFragment();
   rows.forEach(row => {
     const tr = document.createElement('tr');
-    cols.forEach(c => { const td = document.createElement('td'); td.textContent = row[c] ?? ''; tr.appendChild(td); });
+    cols.forEach(c => {
+      const td = document.createElement('td');
+      td.textContent = fmtCell(c, row[c]);
+      tr.appendChild(td);
+    });
     frag.appendChild(tr);
   });
   tbody.appendChild(frag);
@@ -611,6 +615,23 @@ function showToast(msg, type = 'info') {
 
 function fmtCurrency(n) {
   return '£' + (+n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtCell(col, val) {
+  if (val === null || val === undefined) return '';
+  // Format date columns as DD/MM/YYYY
+  if (/date/i.test(col) && val) {
+    const s = String(val).trim();
+    // Parse "M/D/YYYY H:MM:SS AM/PM" or "M/D/YYYY"
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return `${m[2].padStart(2,'0')}/${m[1].padStart(2,'0')}/${m[3]}`;
+  }
+  // Format amount columns as £
+  if (/bill|amount|total|price|value/i.test(col) && val !== '') {
+    const n = parseFloat(String(val).replace(',', ''));
+    if (!isNaN(n)) return fmtCurrency(n);
+  }
+  return String(val);
 }
 
 function esc(s) {
