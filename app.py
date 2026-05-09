@@ -407,6 +407,14 @@ def save_mapping():
     return jsonify({"success": True, "total": len(_salon_mapping), "mapped": mapped})
 
 
+@app.route('/api/mapping/clear', methods=['POST'])
+@require_auth
+def clear_mapping():
+    _salon_mapping.clear()
+    _save_mapping_file()
+    return jsonify({"success": True})
+
+
 @app.route('/auth/xero')
 @require_auth
 def auth_xero():
