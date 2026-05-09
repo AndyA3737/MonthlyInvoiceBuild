@@ -285,7 +285,12 @@ function switchTab(tab) {
     document.getElementById(`pane-${t}`).style.display = t === tab ? '' : 'none';
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
-  if (tab === 'mapping' && !contactsLoaded) loadXeroContacts();
+  if (tab === 'mapping') {
+    // Always refresh mapping from server when opening the tab
+    loadSavedMapping().then(() => {
+      if (!contactsLoaded) loadXeroContacts();
+    });
+  }
 }
 
 // ── Xero status ───────────────────────────────────────────────────────────────
@@ -344,7 +349,9 @@ async function loadInvoices() {
     currentData = data.data || [];
     renderGrid(currentData, +month, +year);
     await checkXeroStatus();
-    await loadSavedMapping();   // refresh mapping in case new salons appeared
+    // Register salons explicitly from the client-side data
+    await registerSalonsFromData(currentData);
+    await loadSavedMapping();
     updateMappingBadge();
     if (!currentData.length) { showEmpty(); showToast('No invoices found for this period', 'info'); }
     else showToast(`Loaded ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''}`, 'success');
@@ -397,6 +404,25 @@ async function exportToXero() {
 }
 
 // ── Contact Mapping ───────────────────────────────────────────────────────────
+
+async function registerSalonsFromData(rows) {
+  if (!rows || !rows.length) return;
+  // Build unique list of salons from the invoice data
+  const seen = new Map();
+  rows.forEach(r => {
+    const code = r.ACCOUNTCODE || r.AccountCode || r.accountCode || '';
+    if (code && !seen.has(code)) {
+      seen.set(code, r.SALONNAME || r.SalonName || r.TENANTNAME || r.TenantName || code);
+    }
+  });
+  const salons = [...seen.entries()].map(([accountCode, salonName]) => ({ accountCode, salonName }));
+  if (!salons.length) return;
+  try {
+    await apiFetch('/api/mapping/register', 'POST', { salons });
+  } catch(e) {
+    console.warn('Could not register salons:', e.message);
+  }
+}
 
 async function loadSavedMapping() {
   try {

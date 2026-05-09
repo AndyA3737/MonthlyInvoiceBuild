@@ -365,6 +365,27 @@ def get_mapping():
     return jsonify(_salon_mapping)
 
 
+@app.route('/api/mapping/register', methods=['POST'])
+@require_auth
+def register_salons():
+    """Register salons sent from the frontend after invoice load."""
+    salons = (request.get_json(silent=True) or {}).get('salons', [])
+    changed = False
+    for s in salons:
+        code = s.get('accountCode', '')
+        if code and code not in _salon_mapping:
+            _salon_mapping[code] = {
+                'salonName':       s.get('salonName', code),
+                'xeroContactId':   None,
+                'xeroContactName': None,
+            }
+            changed = True
+    if changed:
+        _save_mapping_file()
+    app.logger.info("register_salons: %d total entries in mapping", len(_salon_mapping))
+    return jsonify({'success': True, 'total': len(_salon_mapping)})
+
+
 @app.route('/api/mapping', methods=['POST'])
 @require_auth
 def save_mapping():
