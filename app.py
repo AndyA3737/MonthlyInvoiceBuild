@@ -525,7 +525,7 @@ def xero_export():
 
     body = request.get_json(silent=True) or {}
     invoices = body.get('invoices', [])
-    item_code = str(body.get('accountCode', '') or XERO_ACCOUNT_CODE).strip()
+    item_code = "IQPay"
     if not invoices:
         return jsonify({"error": "No invoices provided"}), 400
 
