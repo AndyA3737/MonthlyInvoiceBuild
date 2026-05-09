@@ -264,7 +264,8 @@ def map_to_xero_invoice(row, item_code=None):
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
     xero_inv = {
-        "Type": "ACCREC",
+        "Type":            "ACCREC",
+        "LineAmountTypes": "INCLUSIVE",
         "Contact": contact,
         "LineItems": [{
             "Description": "SalonIQ Monthly Subscription",
