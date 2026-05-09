@@ -372,8 +372,12 @@ function renderGrid(rows, month, year) {
   let totalText = 'Subscriptions: ' + fmtCurrency(billSum);
   if (terminalSum > 0) totalText += '  |  Terminals: ' + fmtCurrency(terminalSum) + '  |  Grand Total: ' + fmtCurrency(billSum + terminalSum);
   document.getElementById('resultsTotal').textContent = totalText;
-  const HIDDEN_COLS = new Set(['InvoiceDate','INVOICEDATE','QuickBooksClientId','QUICKBOOKSCLIENTID','salonid','SalonId','SALONID']);
-  const cols = Object.keys(rows[0]).filter(c => !HIDDEN_COLS.has(c));
+  const HIDDEN_COLS   = new Set(['InvoiceDate','INVOICEDATE','QuickBooksClientId','QUICKBOOKSCLIENTID','salonid','SalonId','SALONID']);
+  const COL_ORDER     = ['AccountCode','Tenantname','SalonName','TerminalBill','TotalBill'];
+  const allCols       = Object.keys(rows[0]).filter(c => !HIDDEN_COLS.has(c));
+  const ordered       = COL_ORDER.filter(c => allCols.includes(c));
+  const remaining     = allCols.filter(c => !COL_ORDER.includes(c));
+  const cols          = [...ordered, ...remaining];
   const thead = document.getElementById('tableHead'), tbody = document.getElementById('tableBody');
   thead.innerHTML = ''; tbody.innerHTML = '';
   const hr = document.createElement('tr');
