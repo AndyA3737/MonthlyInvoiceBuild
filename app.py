@@ -238,25 +238,27 @@ def _parse_amount(val):
 
 def map_to_xero_invoice(row):
     """Map a SalonIQ StripeInvoices row to a Xero invoice dict."""
-    account_code = str(row.get('ACCOUNTCODE', ''))
+    account_code = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
     mapped = _salon_mapping.get(account_code)
 
     if mapped and mapped.get('xeroContactId'):
         contact = {"ContactID": mapped['xeroContactId']}
     else:
-        contact = {"Name": str(row.get('SALONNAME') or row.get('TENANTNAME') or "Unknown Customer")}
+        name = (row.get('SalonName') or row.get('SALONNAME') or
+                row.get('Tenantname') or row.get('TENANTNAME') or 'Unknown Customer')
+        contact = {"Name": str(name)}
 
-    # INVOICEDATE format from LIVE API: "4/30/2026 12:00:00 AM"
-    inv_date = _parse_date(row.get('INVOICEDATE', ''))
+    # InvoiceDate format from LIVE API: "4/30/2026 12:00:00 AM"
+    inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
-    # TOTALBILL is already in pounds (e.g. 311.8000)
+    # TotalBill is already in pounds (e.g. 311.8000)
     try:
-        amount = round(float(str(row.get('TOTALBILL', '0')).replace(',', '')), 2)
+        amount = round(float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', '')), 2)
     except (ValueError, TypeError):
         amount = 0.0
 
-    # ACCOUNTCODE (e.g. ABS003) used as the Xero invoice reference
-    reference = str(row.get('ACCOUNTCODE', ''))
+    # AccountCode (e.g. ABS003) used as the Xero invoice reference
+    reference = account_code
 
     xero_inv = {
         "Type": "ACCREC",
@@ -306,10 +308,11 @@ def api_invoices():
         # Register any new salons in the mapping (without Xero contact yet)
         changed = False
         for row in rows:
-            code = row.get('ACCOUNTCODE', '')
+            code = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
             if code and code not in _salon_mapping:
                 _salon_mapping[code] = {
-                    "salonName":        row.get('SALONNAME') or row.get('TENANTNAME') or code,
+                    "salonName":        (row.get('SalonName') or row.get('SALONNAME') or
+                                         row.get('Tenantname') or row.get('TENANTNAME') or code),
                     "xeroContactId":    None,
                     "xeroContactName":  None,
                 }
