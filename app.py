@@ -526,9 +526,25 @@ def xero_export():
                 json={"Invoices": batch},
             )
             if r.ok:
-                created_total += len(r.json().get("Invoices", []))
+                result = r.json()
+                # Count created and capture any per-invoice validation errors
+                for inv in result.get("Invoices", []):
+                    if inv.get("HasErrors"):
+                        for ve in inv.get("ValidationErrors", []):
+                            errors.append(f"{inv.get('Reference','?')}: {ve.get('Message','')}")
+                    else:
+                        created_total += 1
             else:
-                errors.append(r.text[:300])
+                try:
+                    err_body = r.json()
+                    for elem in err_body.get("Elements", []):
+                        ref = elem.get("Reference", "?")
+                        for ve in elem.get("ValidationErrors", []):
+                            errors.append(f"{ref}: {ve.get('Message', '')}")
+                    if not errors:
+                        errors.append(err_body.get("Message", r.text[:300]))
+                except Exception:
+                    errors.append(r.text[:300])
 
         if errors:
             return jsonify({
