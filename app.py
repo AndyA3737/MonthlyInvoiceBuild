@@ -242,7 +242,7 @@ def map_to_xero_invoice(row):
     mapped = _salon_mapping.get(account_code)
 
     if mapped and mapped.get('xeroContactId'):
-        contact = {"ContactID": mapped['xeroContactId'], "Name": mapped['xeroContactName']}
+        contact = {"ContactID": mapped['xeroContactId']}
     else:
         contact = {"Name": str(row.get('SALONNAME') or row.get('TENANTNAME') or "Unknown Customer")}
 
@@ -260,7 +260,7 @@ def map_to_xero_invoice(row):
 
     xero_inv = {
         "Type": "ACCREC",
-        "Contact": {"Name": contact},
+        "Contact": contact,
         "LineItems": [{
             "Description": "SalonIQ Monthly Subscription",
             "Quantity":    1.0,
