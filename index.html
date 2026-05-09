@@ -403,7 +403,10 @@ async function loadSavedMapping() {
     savedMapping = await apiFetch('/api/mapping');
     renderMappingTable();
     updateMappingBadge();
-  } catch(e) { console.error('Could not load mapping', e); }
+  } catch(e) {
+    showToast('Could not load mapping: ' + e.message, 'error');
+    console.error('loadSavedMapping failed', e);
+  }
 }
 
 async function loadXeroContacts() {
@@ -415,11 +418,13 @@ async function loadXeroContacts() {
     const data = await apiFetch('/api/xero/contacts');
     xeroContacts = data.contacts || [];
     contactsLoaded = true;
-    renderMappingTable();
-  } catch(e) { showToast('Could not load Xero contacts: ' + e.message, 'error'); }
-  finally {
+  } catch(e) {
+    showToast('Could not load Xero contacts: ' + e.message, 'error');
+  } finally {
+    // Always re-render so salons show even if Xero contacts failed
     document.getElementById('mappingLoading').style.display = 'none';
     document.getElementById('loadContactsBtn').disabled = false;
+    renderMappingTable();
   }
 }
 
@@ -534,10 +539,13 @@ function updateMappingBadge() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch(url, method = 'GET', body = null) {
-  const opts = { method, headers: {} };
+  const opts = { method, credentials: 'same-origin', headers: {} };
   if (body) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
   const res = await fetch(url, opts);
-  const data = await res.json();
+  if (res.status === 401) throw new Error('Session expired — please refresh the page');
+  let data;
+  try { data = await res.json(); }
+  catch(e) { throw new Error(`HTTP ${res.status}: non-JSON response from server`); }
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
