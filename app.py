@@ -261,12 +261,11 @@ def map_to_xero_invoice(row, item_code=None):
     except (ValueError, TypeError):
         amount = 0.0
 
-    # TerminalBill — add as a second line item if > 0
+    # TerminalBill is VAT-exclusive — pass as-is and Xero adds VAT on top
     try:
-        terminal_gross = float(str(row.get('TerminalBill') or row.get('TERMINALBILL') or '0').replace(',', ''))
-        terminal_amount = round(terminal_gross / 1.2, 2) if terminal_gross > 0 else 0.0
+        terminal_amount = round(float(str(row.get('TerminalBill') or row.get('TERMINALBILL') or '0').replace(',', '')), 2)
     except (ValueError, TypeError):
-        terminal_gross, terminal_amount = 0.0, 0.0
+        terminal_amount = 0.0
 
     # AccountCode (e.g. ABS003) used as the Xero invoice reference
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
