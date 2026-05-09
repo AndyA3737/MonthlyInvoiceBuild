@@ -371,11 +371,11 @@ function renderGrid(rows, month, year) {
   if (!rows || !rows.length) { showEmpty(); return; }
   document.getElementById('resultsTitle').textContent = MONTH_NAMES[month-1] + ' ' + year + ' — Stripe Invoices';
   document.getElementById('resultsCount').textContent = rows.length + ' record' + (rows.length !== 1 ? 's' : '');
-  const amountKey = Object.keys(rows[0]).find(k => /amount|total|value|price/i.test(k));
-  if (amountKey) {
-    const sum = rows.reduce((a, r) => a + (parseFloat(String(r[amountKey]).replace(',','')) || 0), 0);
-    document.getElementById('resultsTotal').textContent = 'Total: ' + fmtCurrency(sum);
-  } else { document.getElementById('resultsTotal').textContent = ''; }
+  const billSum      = rows.reduce((a, r) => a + (parseFloat(String(r.TotalBill    || r.TOTALBILL    || 0).replace(',','')) || 0), 0);
+  const terminalSum  = rows.reduce((a, r) => a + (parseFloat(String(r.TerminalBill || r.TERMINALBILL || 0).replace(',','')) || 0), 0);
+  let totalText = 'Subscriptions: ' + fmtCurrency(billSum);
+  if (terminalSum > 0) totalText += '  |  Terminals: ' + fmtCurrency(terminalSum) + '  |  Grand Total: ' + fmtCurrency(billSum + terminalSum);
+  document.getElementById('resultsTotal').textContent = totalText;
   const cols = Object.keys(rows[0]);
   const thead = document.getElementById('tableHead'), tbody = document.getElementById('tableBody');
   thead.innerHTML = ''; tbody.innerHTML = '';

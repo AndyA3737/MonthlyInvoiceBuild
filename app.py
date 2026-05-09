@@ -255,24 +255,30 @@ def map_to_xero_invoice(row, item_code=None):
     inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
     # TotalBill is VAT-inclusive; divide by 1.2 to get the net amount for Xero
-    # (Xero then adds 20% OUTPUT tax to arrive back at the original inclusive total)
     try:
         gross = float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', ''))
         amount = round(gross / 1.2, 2)
     except (ValueError, TypeError):
         amount = 0.0
 
+    # TerminalBill — add as a second line item if > 0
+    try:
+        terminal_gross = float(str(row.get('TerminalBill') or row.get('TERMINALBILL') or '0').replace(',', ''))
+        terminal_amount = round(terminal_gross / 1.2, 2) if terminal_gross > 0 else 0.0
+    except (ValueError, TypeError):
+        terminal_gross, terminal_amount = 0.0, 0.0
+
     # AccountCode (e.g. ABS003) used as the Xero invoice reference
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
+
+    line_items = [{"Quantity": 1.0, "UnitAmount": amount, "ItemCode": item_code}]
+    if terminal_amount > 0:
+        line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": "IQPayTerminal"})
 
     xero_inv = {
         "Type": "ACCREC",
         "Contact": contact,
-        "LineItems": [{
-            "Quantity":   1.0,
-            "UnitAmount": amount,
-            "ItemCode":   item_code,
-        }],
+        "LineItems": line_items,
         "Status": "DRAFT",
     }
     if inv_date:
