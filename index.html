@@ -407,15 +407,20 @@ async function exportToXero() {
 
 async function registerSalonsFromData(rows) {
   if (!rows || !rows.length) return;
-  // Build unique list of salons from the invoice data
   const seen = new Map();
   rows.forEach(r => {
-    const code = r.ACCOUNTCODE || r.AccountCode || r.accountCode || '';
-    if (code && !seen.has(code)) {
-      seen.set(code, r.SALONNAME || r.SalonName || r.TENANTNAME || r.TenantName || code);
+    const salonId    = r.salonid || r.SalonId || '';
+    const accountCode = r.AccountCode || r.ACCOUNTCODE || '';
+    const key = salonId || accountCode;
+    if (key && !seen.has(key)) {
+      seen.set(key, {
+        salonId:     key,
+        accountCode: accountCode,
+        salonName:   r.SalonName || r.SALONNAME || r.Tenantname || r.TENANTNAME || key,
+      });
     }
   });
-  const salons = [...seen.entries()].map(([accountCode, salonName]) => ({ accountCode, salonName }));
+  const salons = [...seen.values()];
   if (!salons.length) return;
   try {
     await apiFetch('/api/mapping/register', 'POST', { salons });
@@ -477,19 +482,25 @@ function renderMappingTable() {
   tbody.innerHTML = '';
   const frag = document.createDocumentFragment();
 
-  keys.sort().forEach(code => {
-    const entry = savedMapping[code];
+  keys.sort((a, b) => {
+    // Sort by accountCode if available, otherwise by key
+    const ac = (savedMapping[a].accountCode || a).toLowerCase();
+    const bc = (savedMapping[b].accountCode || b).toLowerCase();
+    return ac < bc ? -1 : ac > bc ? 1 : 0;
+  }).forEach(salonId => {
+    const entry = savedMapping[salonId];
     const tr = document.createElement('tr');
-    tr.dataset.code = code;
-    tr.dataset.name = (entry.salonName || '').toLowerCase();
+    tr.dataset.code = salonId;
+    tr.dataset.name = ((entry.accountCode || '') + ' ' + (entry.salonName || '')).toLowerCase();
 
     const mapped = !!entry.xeroContactId;
+    const displayCode = entry.accountCode || salonId;
 
     tr.innerHTML = `
-      <td style="font-weight:600;color:var(--navy);font-size:13px;">${esc(code)}</td>
+      <td style="font-weight:600;color:var(--navy);font-size:13px;">${esc(displayCode)}</td>
       <td style="font-size:13px;">${esc(entry.salonName || '')}</td>
       <td>
-        <select class="contact-select" data-code="${esc(code)}" onchange="onMappingChange(this)">
+        <select class="contact-select" data-code="${esc(salonId)}" onchange="onMappingChange(this)">
           ${contactOpts}
         </select>
       </td>

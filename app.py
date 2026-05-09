@@ -238,8 +238,10 @@ def _parse_amount(val):
 
 def map_to_xero_invoice(row):
     """Map a SalonIQ StripeInvoices row to a Xero invoice dict."""
-    account_code = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
-    mapped = _salon_mapping.get(account_code)
+    # Use salonid (UUID) as the stable mapping key; fall back to AccountCode
+    salon_key = str(row.get('salonid') or row.get('SalonId') or
+                    row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
+    mapped = _salon_mapping.get(salon_key)
 
     if mapped and mapped.get('xeroContactId'):
         contact = {"ContactID": mapped['xeroContactId']}
@@ -258,7 +260,7 @@ def map_to_xero_invoice(row):
         amount = 0.0
 
     # AccountCode (e.g. ABS003) used as the Xero invoice reference
-    reference = account_code
+    reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
     xero_inv = {
         "Type": "ACCREC",
@@ -308,13 +310,15 @@ def api_invoices():
         # Register any new salons in the mapping (without Xero contact yet)
         changed = False
         for row in rows:
-            code = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
-            if code and code not in _salon_mapping:
-                _salon_mapping[code] = {
-                    "salonName":        (row.get('SalonName') or row.get('SALONNAME') or
-                                         row.get('Tenantname') or row.get('TENANTNAME') or code),
-                    "xeroContactId":    None,
-                    "xeroContactName":  None,
+            key = str(row.get('salonid') or row.get('SalonId') or
+                      row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
+            if key and key not in _salon_mapping:
+                _salon_mapping[key] = {
+                    "accountCode":     str(row.get('AccountCode') or row.get('ACCOUNTCODE') or ''),
+                    "salonName":       (row.get('SalonName') or row.get('SALONNAME') or
+                                        row.get('Tenantname') or row.get('TENANTNAME') or key),
+                    "xeroContactId":   None,
+                    "xeroContactName": None,
                 }
                 changed = True
         if changed:
@@ -375,10 +379,11 @@ def register_salons():
     salons = (request.get_json(silent=True) or {}).get('salons', [])
     changed = False
     for s in salons:
-        code = s.get('accountCode', '')
-        if code and code not in _salon_mapping:
-            _salon_mapping[code] = {
-                'salonName':       s.get('salonName', code),
+        key = s.get('salonId', '') or s.get('accountCode', '')
+        if key and key not in _salon_mapping:
+            _salon_mapping[key] = {
+                'accountCode':     s.get('accountCode', ''),
+                'salonName':       s.get('salonName', key),
                 'xeroContactId':   None,
                 'xeroContactName': None,
             }
