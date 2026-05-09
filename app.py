@@ -494,11 +494,16 @@ def auth_xero_callback():
 def xero_status():
     if not _xero_tokens.get('access_token'):
         return jsonify({"connected": False})
-    expired = time.time() > _xero_tokens.get('expires_at', 0)
+    # Proactively refresh if expired so the UI always shows connected
+    if time.time() > _xero_tokens.get('expires_at', 0) - 60:
+        try:
+            _xero_refresh_if_needed()
+        except Exception:
+            return jsonify({"connected": False})
     return jsonify({
         "connected": True,
         "tenant":    _xero_tokens.get('tenant_name', 'Unknown Org'),
-        "expired":   expired,
+        "expired":   False,
     })
 
 
