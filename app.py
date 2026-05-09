@@ -269,10 +269,9 @@ def map_to_xero_invoice(row, item_code=None):
         "Type": "ACCREC",
         "Contact": contact,
         "LineItems": [{
-            "Description": "SalonIQ Monthly Subscription",
-            "Quantity":    1.0,
-            "UnitAmount":  amount,
-            "ItemCode":    item_code,
+            "Quantity":   1.0,
+            "UnitAmount": amount,
+            "ItemCode":   item_code,
         }],
         "Status": "DRAFT",
     }
