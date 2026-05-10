@@ -254,14 +254,18 @@ def map_to_xero_invoice(row, item_code=None):
     # InvoiceDate format from LIVE API: "4/30/2026 12:00:00 AM"
     inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
-    # TotalBill is VAT-inclusive; divide by 1.2 to get the net amount for Xero
+    # Determine currency from mapping — drives VAT treatment
+    currency = (_salon_mapping.get(salon_key) or {}).get('xeroContactCurrency', '') or 'GBP'
+    is_gbp   = currency.upper() == 'GBP'
+
+    # TotalBill: GBP = VAT-inclusive (divide by 1.2), non-GBP = no VAT (pass as-is)
     try:
-        gross = float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', ''))
-        amount = round(gross / 1.2, 2)
+        gross  = float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', ''))
+        amount = round(gross / 1.2, 2) if is_gbp else round(gross, 2)
     except (ValueError, TypeError):
         amount = 0.0
 
-    # TerminalBill is VAT-exclusive — pass as-is and Xero adds VAT on top
+    # TerminalBill: GBP = VAT-exclusive (Xero adds VAT), non-GBP = no VAT
     try:
         terminal_amount = round(float(str(row.get('TerminalBill') or row.get('TERMINALBILL') or '0').replace(',', '')), 2)
     except (ValueError, TypeError):
@@ -270,9 +274,11 @@ def map_to_xero_invoice(row, item_code=None):
     # AccountCode (e.g. ABS003) used as the Xero invoice reference
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
-    line_items = [{"Quantity": 1.0, "UnitAmount": amount, "ItemCode": item_code}]
+    # Build line items — non-GBP invoices explicitly set TaxType NONE
+    tax_override = {} if is_gbp else {"TaxType": "NONE"}
+    line_items = [{"Quantity": 1.0, "UnitAmount": amount, "ItemCode": item_code, **tax_override}]
     if terminal_amount > 0:
-        line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": "IQPayTerminal"})
+        line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": "IQPayTerminal", **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
@@ -280,9 +286,8 @@ def map_to_xero_invoice(row, item_code=None):
         "LineItems": line_items,
         "Status":  "DRAFT",
     }
-    currency = _salon_mapping.get(salon_key, {}).get('xeroContactCurrency', '')
-    if currency:
-        xero_inv["CurrencyCode"] = currency
+    if currency and currency.upper() != 'GBP':
+        xero_inv["CurrencyCode"] = currency.upper()
     if inv_date:
         xero_inv["Date"]    = inv_date
         xero_inv["DueDate"] = inv_date
