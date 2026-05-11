@@ -383,9 +383,18 @@ function renderGrid(rows, month, year) {
   const thead = document.getElementById('tableHead'), tbody = document.getElementById('tableBody');
   thead.innerHTML = ''; tbody.innerHTML = '';
   const hr = document.createElement('tr');
-  cols.forEach(c => { const th = document.createElement('th'); th.textContent = COL_RENAME[c] || c; hr.appendChild(th); });
+  const RIGHT_COLS = new Set(['TerminalBill','TotalBill']);
+  cols.forEach(c => {
+    const th = document.createElement('th');
+    th.textContent = COL_RENAME[c] || c;
+    if (RIGHT_COLS.has(c)) th.style.textAlign = 'right';
+    hr.appendChild(th);
+  });
   // Add Total column header
-  const thTotal = document.createElement('th'); thTotal.textContent = 'Total'; hr.appendChild(thTotal);
+  const thTotal = document.createElement('th');
+  thTotal.textContent = 'Total';
+  thTotal.style.textAlign = 'right';
+  hr.appendChild(thTotal);
   thead.appendChild(hr);
 
   const frag = document.createDocumentFragment();
@@ -394,6 +403,7 @@ function renderGrid(rows, month, year) {
     cols.forEach(c => {
       const td = document.createElement('td');
       td.textContent = fmtCell(c, row[c]);
+      if (RIGHT_COLS.has(c)) td.style.textAlign = 'right';
       tr.appendChild(td);
     });
     // Computed Total = TerminalBill + TotalBill
@@ -401,6 +411,7 @@ function renderGrid(rows, month, year) {
     const subs     = parseFloat(String(row.TotalBill    || row.TOTALBILL    || 0).replace(',','')) || 0;
     const tdTotal  = document.createElement('td');
     tdTotal.textContent = fmtCurrency(terminal + subs);
+    tdTotal.style.textAlign = 'right';
     tr.appendChild(tdTotal);
     frag.appendChild(tr);
   });
