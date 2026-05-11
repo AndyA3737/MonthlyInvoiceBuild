@@ -265,7 +265,11 @@ def _parse_amount(val):
     return amount
 
 
-def map_to_xero_invoice(row, source_cfg=None):
+_MONTH_NAMES = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December']
+
+
+def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
     """Map a SalonIQ invoice row to a Xero invoice dict using the source config."""
     if source_cfg is None:
         source_cfg = INVOICE_SOURCES['stripe']
@@ -329,7 +333,9 @@ def map_to_xero_invoice(row, source_cfg=None):
         except (ValueError, TypeError):
             sms_qty, sms_price, sms_amount = 0.0, 0.0, 0.0
         if sms_amount > 0:
-            line_items.append({"Quantity": sms_qty, "UnitAmount": round(sms_price, 6), "ItemCode": item_sms, **tax_override})
+            prev_month = _MONTH_NAMES[(invoice_month - 2) % 12] if invoice_month else ''
+            sms_desc = f"SMS Messages (Sent in {prev_month})" if prev_month else "SMS Messages"
+            line_items.append({"Quantity": sms_qty, "UnitAmount": round(sms_price, 6), "ItemCode": item_sms, "Description": sms_desc, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
@@ -625,11 +631,12 @@ def xero_export():
     invoices  = body.get('invoices', [])
     source_id  = body.get('source', 'stripe')
     source_cfg = INVOICE_SOURCES.get(source_id, INVOICE_SOURCES['stripe'])
+    invoice_month = int(body.get('month', 0) or 0)
     if not invoices:
         return jsonify({"error": "No invoices provided"}), 400
 
     try:
-        xero_invs = [map_to_xero_invoice(row, source_cfg) for row in invoices]
+        xero_invs = [map_to_xero_invoice(row, source_cfg, invoice_month=invoice_month) for row in invoices]
         created_total = 0
         errors = []
         BATCH_SIZE = 50
