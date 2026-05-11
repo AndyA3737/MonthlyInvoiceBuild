@@ -375,6 +375,7 @@ def api_invoices():
                 _salon_mapping[key] = {
                     "accountCode":     str(row.get('AccountCode') or row.get('ACCOUNTCODE') or ''),
                     "salonName":       (row.get('SalonName') or row.get('SALONNAME') or
+                                        row.get('Name') or
                                         row.get('Tenantname') or row.get('TENANTNAME') or key),
                     "xeroContactId":   None,
                     "xeroContactName": None,

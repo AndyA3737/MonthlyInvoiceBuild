@@ -507,7 +507,7 @@ async function registerSalonsFromData(rows) {
       seen.set(key, {
         salonId:     key,
         accountCode: accountCode,
-        salonName:   r.SalonName || r.SALONNAME || r.Tenantname || r.TENANTNAME || key,
+        salonName:   r.SalonName || r.SALONNAME || r.Name || r.Tenantname || r.TENANTNAME || key,
       });
     }
   });
