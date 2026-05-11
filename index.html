@@ -244,6 +244,7 @@
         <thead>
           <tr>
             <th style="width:110px;">Account Code</th>
+            <th>Tenant Name</th>
             <th>Salon Name</th>
             <th style="min-width:280px;">Xero Contact</th>
             <th style="width:80px;text-align:center;">Status</th>
@@ -507,6 +508,7 @@ async function registerSalonsFromData(rows) {
       seen.set(key, {
         salonId:     key,
         accountCode: accountCode,
+        tenantName:  r.Tenantname || r.TenantName || r.TENANTNAME || '',
         salonName:   r.SalonName || r.SALONNAME || r.Name || r.Tenantname || r.TENANTNAME || key,
       });
     }
@@ -593,6 +595,7 @@ function renderMappingTable() {
 
     tr.innerHTML = `
       <td style="font-weight:600;color:var(--navy);font-size:13px;">${esc(displayCode)}</td>
+      <td style="font-size:13px;color:var(--muted);">${esc(entry.tenantName || '')}</td>
       <td style="font-size:13px;">${esc(entry.salonName || '')}</td>
       <td>
         <select class="contact-select" data-code="${esc(salonId)}"

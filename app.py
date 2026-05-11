@@ -447,6 +447,7 @@ def register_salons():
         if key and key not in _salon_mapping:
             _salon_mapping[key] = {
                 'accountCode':     s.get('accountCode', ''),
+                'tenantName':      s.get('tenantName', ''),
                 'salonName':       s.get('salonName', key),
                 'xeroContactId':   None,
                 'xeroContactName': None,
