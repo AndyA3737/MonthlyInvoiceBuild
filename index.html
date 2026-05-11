@@ -508,7 +508,7 @@ async function registerSalonsFromData(rows) {
       seen.set(key, {
         salonId:     key,
         accountCode: accountCode,
-        tenantName:  r.Tenantname || r.TenantName || r.TENANTNAME || '',
+        tenantName:  (() => { const k = Object.keys(r).find(x => x.toLowerCase() === 'tenantname'); return k ? r[k] : ''; })(),
         salonName:   r.SalonName || r.SALONNAME || r.Name || r.Tenantname || r.TENANTNAME || key,
       });
     }

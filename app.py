@@ -279,8 +279,9 @@ def map_to_xero_invoice(row, source_cfg=None):
     if mapped and mapped.get('xeroContactId'):
         contact = {"ContactID": mapped['xeroContactId']}
     else:
-        name = (row.get('SalonName') or row.get('SALONNAME') or
-                row.get('Tenantname') or row.get('TENANTNAME') or 'Unknown Customer')
+        name = (row.get('SalonName') or row.get('SALONNAME') or row.get('Name') or
+                next((str(v) for k, v in row.items() if k.lower() == 'tenantname' and v), '') or
+                'Unknown Customer')
         contact = {"Name": str(name)}
 
     # InvoiceDate format from LIVE API: "4/30/2026 12:00:00 AM"
@@ -371,7 +372,7 @@ def api_invoices():
         for row in rows:
             key = str(row.get('salonid') or row.get('SalonId') or
                       row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
-            tenant = (row.get('Tenantname') or row.get('TenantName') or row.get('TENANTNAME') or '')
+            tenant = next((str(v) for k, v in row.items() if k.lower() == 'tenantname' and v), '')
             salon  = (row.get('SalonName') or row.get('SALONNAME') or
                       row.get('Name') or tenant or key)
             if not key:
