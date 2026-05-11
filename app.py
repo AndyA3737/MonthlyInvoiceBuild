@@ -133,6 +133,7 @@ INVOICE_SOURCES = {
         "label":          "Stripe Invoices",
         "report":         "XXX_Export_Admin_TUBR_StripeInvoices",
         "item_code":      "IQPay",
+        "amount_field":   "TotalBill",
         "item_terminal":  "IQPayTerminal",
         "vat_inclusive":  True,
         "terminal_vat_inclusive": False,
@@ -140,9 +141,10 @@ INVOICE_SOURCES = {
     "subscription": {
         "label":          "Subscription Invoices",
         "report":         "XXX_Export_Admin_TUBR_SubscriptionInvoices",
-        "item_code":      "IQSubscription",   # update once confirmed
+        "item_code":      "Monthly",
+        "amount_field":   "MonthlyAmount",
         "item_terminal":  None,
-        "vat_inclusive":  True,               # update once confirmed
+        "vat_inclusive":  False,   # VAT-exclusive — Xero adds VAT on top for GBP
         "terminal_vat_inclusive": False,
     },
 }
@@ -264,9 +266,10 @@ def map_to_xero_invoice(row, source_cfg=None):
     """Map a SalonIQ invoice row to a Xero invoice dict using the source config."""
     if source_cfg is None:
         source_cfg = INVOICE_SOURCES['stripe']
-    item_code         = source_cfg['item_code']
-    item_terminal     = source_cfg.get('item_terminal')
-    vat_inclusive     = source_cfg.get('vat_inclusive', True)
+    item_code          = source_cfg['item_code']
+    amount_field       = source_cfg.get('amount_field', 'TotalBill')
+    item_terminal      = source_cfg.get('item_terminal')
+    vat_inclusive      = source_cfg.get('vat_inclusive', True)
     term_vat_inclusive = source_cfg.get('terminal_vat_inclusive', False)
     # Use salonid (UUID) as the stable mapping key; fall back to AccountCode
     salon_key = str(row.get('salonid') or row.get('SalonId') or
@@ -287,9 +290,10 @@ def map_to_xero_invoice(row, source_cfg=None):
     currency = (_salon_mapping.get(salon_key) or {}).get('xeroContactCurrency', '') or 'GBP'
     is_gbp   = currency.upper() == 'GBP'
 
-    # Main bill — apply VAT treatment based on source config and currency
+    # Main bill — use configured amount field, apply VAT based on source and currency
     try:
-        gross  = float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', ''))
+        raw    = row.get(amount_field) or row.get(amount_field.upper()) or '0'
+        gross  = float(str(raw).replace(',', ''))
         apply_vat = vat_inclusive and is_gbp
         amount = round(gross / 1.2, 2) if apply_vat else round(gross, 2)
     except (ValueError, TypeError):
