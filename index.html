@@ -397,8 +397,14 @@ function renderGrid(rows, month, year) {
     },
     subscription: {
       label:      'Subscription Invoices',
-      colOrder:   ['AccountCode','Tenantname','SalonName','MonthlyAmount'],
-      colRename:  { AccountCode:'Account', Tenantname:'Tenant', SalonName:'Salon', MonthlyAmount:'Monthly Amount' },
+      // Include casing variants — only the ones present in the data will be shown
+      colOrder:   ['AccountCode','Tenantname','TenantName','SalonName','Salonname','MonthlyAmount'],
+      colRename:  {
+        AccountCode:'Account',
+        Tenantname:'Tenant', TenantName:'Tenant',
+        SalonName:'Salon',   Salonname:'Salon',
+        MonthlyAmount:'Monthly Amount',
+      },
       rightCols:  new Set(['MonthlyAmount']),
       totalCols:  { bill:'MonthlyAmount', terminal: null },
       showTotal:  false,
@@ -416,7 +422,8 @@ function renderGrid(rows, month, year) {
   if (terminalSum > 0) totalText += '  |  Terminals: ' + fmtCurrency(terminalSum) + '  |  Grand Total: ' + fmtCurrency(billSum + terminalSum);
   document.getElementById('resultsTotal').textContent = totalText;
 
-  const HIDDEN_COLS = new Set(['InvoiceDate','INVOICEDATE','QuickBooksClientId','QUICKBOOKSCLIENTID','salonid','SalonId','SALONID']);
+  const extraHidden = source === 'subscription' ? ['AdminEmail','adminemail','ADMINEMAIL'] : [];
+  const HIDDEN_COLS = new Set(['InvoiceDate','INVOICEDATE','QuickBooksClientId','QUICKBOOKSCLIENTID','salonid','SalonId','SALONID',...extraHidden]);
   const COL_ORDER   = cfg.colOrder;
   const COL_RENAME  = cfg.colRename;
   const allCols     = Object.keys(rows[0]).filter(c => !HIDDEN_COLS.has(c));
