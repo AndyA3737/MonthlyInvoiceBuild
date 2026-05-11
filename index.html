@@ -383,16 +383,42 @@ async function loadInvoices() {
 
 function renderGrid(rows, month, year) {
   if (!rows || !rows.length) { showEmpty(); return; }
-  document.getElementById('resultsTitle').textContent = MONTH_NAMES[month-1] + ' ' + year + ' — Stripe Invoices';
+  const source = document.getElementById('sourceSelect').value || 'stripe';
+
+  // Per-source column config
+  const SOURCE_CONFIG = {
+    stripe: {
+      label:      'Stripe Invoices',
+      colOrder:   ['AccountCode','Tenantname','SalonName','TerminalBill','TotalBill'],
+      colRename:  { AccountCode:'Account', Tenantname:'Tenant', SalonName:'Salon', TerminalBill:'Terminal', TotalBill:'Transactions' },
+      rightCols:  new Set(['TerminalBill','TotalBill']),
+      totalCols:  { bill:'TotalBill', terminal:'TerminalBill' },
+      showTotal:  true,
+    },
+    subscription: {
+      label:      'Subscription Invoices',
+      colOrder:   ['AccountCode','Tenantname','SalonName','MonthlyAmount'],
+      colRename:  { AccountCode:'Account', Tenantname:'Tenant', SalonName:'Salon', MonthlyAmount:'Monthly Amount' },
+      rightCols:  new Set(['MonthlyAmount']),
+      totalCols:  { bill:'MonthlyAmount', terminal: null },
+      showTotal:  false,
+    },
+  };
+  const cfg = SOURCE_CONFIG[source] || SOURCE_CONFIG.stripe;
+
+  document.getElementById('resultsTitle').textContent = MONTH_NAMES[month-1] + ' ' + year + ' — ' + cfg.label;
   document.getElementById('resultsCount').textContent = rows.length + ' record' + (rows.length !== 1 ? 's' : '');
-  const billSum      = rows.reduce((a, r) => a + (parseFloat(String(r.TotalBill    || r.TOTALBILL    || 0).replace(',','')) || 0), 0);
-  const terminalSum  = rows.reduce((a, r) => a + (parseFloat(String(r.TerminalBill || r.TERMINALBILL || 0).replace(',','')) || 0), 0);
-  let totalText = 'Subscriptions: ' + fmtCurrency(billSum);
+
+  const billSum     = rows.reduce((a, r) => a + (parseFloat(String(r[cfg.totalCols.bill]    || 0).replace(',','')) || 0), 0);
+  const terminalSum = cfg.totalCols.terminal
+    ? rows.reduce((a, r) => a + (parseFloat(String(r[cfg.totalCols.terminal] || 0).replace(',','')) || 0), 0) : 0;
+  let totalText = (source === 'subscription' ? 'Total: ' : 'Subscriptions: ') + fmtCurrency(billSum);
   if (terminalSum > 0) totalText += '  |  Terminals: ' + fmtCurrency(terminalSum) + '  |  Grand Total: ' + fmtCurrency(billSum + terminalSum);
   document.getElementById('resultsTotal').textContent = totalText;
+
   const HIDDEN_COLS = new Set(['InvoiceDate','INVOICEDATE','QuickBooksClientId','QUICKBOOKSCLIENTID','salonid','SalonId','SALONID']);
-  const COL_ORDER   = ['AccountCode','Tenantname','SalonName','TerminalBill','TotalBill'];
-  const COL_RENAME  = { AccountCode:'Account', Tenantname:'Tenant', SalonName:'Salon', TerminalBill:'Terminal', TotalBill:'Transactions' };
+  const COL_ORDER   = cfg.colOrder;
+  const COL_RENAME  = cfg.colRename;
   const allCols     = Object.keys(rows[0]).filter(c => !HIDDEN_COLS.has(c));
   const ordered     = COL_ORDER.filter(c => allCols.includes(c));
   const remaining   = allCols.filter(c => !COL_ORDER.includes(c));
@@ -401,18 +427,20 @@ function renderGrid(rows, month, year) {
   const thead = document.getElementById('tableHead'), tbody = document.getElementById('tableBody');
   thead.innerHTML = ''; tbody.innerHTML = '';
   const hr = document.createElement('tr');
-  const RIGHT_COLS = new Set(['TerminalBill','TotalBill']);
+  const RIGHT_COLS = cfg.rightCols;
   cols.forEach(c => {
     const th = document.createElement('th');
     th.textContent = COL_RENAME[c] || c;
     if (RIGHT_COLS.has(c)) th.style.textAlign = 'right';
     hr.appendChild(th);
   });
-  // Add Total column header
-  const thTotal = document.createElement('th');
-  thTotal.textContent = 'Total';
-  thTotal.style.textAlign = 'right';
-  hr.appendChild(thTotal);
+  // Add Total column header (Stripe only)
+  if (cfg.showTotal) {
+    const thTotal = document.createElement('th');
+    thTotal.textContent = 'Total';
+    thTotal.style.textAlign = 'right';
+    hr.appendChild(thTotal);
+  }
   thead.appendChild(hr);
 
   const frag = document.createDocumentFragment();
@@ -424,13 +452,15 @@ function renderGrid(rows, month, year) {
       if (RIGHT_COLS.has(c)) td.style.textAlign = 'right';
       tr.appendChild(td);
     });
-    // Computed Total = TerminalBill + TotalBill
-    const terminal = parseFloat(String(row.TerminalBill || row.TERMINALBILL || 0).replace(',','')) || 0;
-    const subs     = parseFloat(String(row.TotalBill    || row.TOTALBILL    || 0).replace(',','')) || 0;
-    const tdTotal  = document.createElement('td');
-    tdTotal.textContent = fmtCurrency(terminal + subs);
-    tdTotal.style.textAlign = 'right';
-    tr.appendChild(tdTotal);
+    // Computed Total column (Stripe only)
+    if (cfg.showTotal) {
+      const terminal = parseFloat(String(row.TerminalBill || row.TERMINALBILL || 0).replace(',','')) || 0;
+      const subs     = parseFloat(String(row.TotalBill    || row.TOTALBILL    || 0).replace(',','')) || 0;
+      const tdTotal  = document.createElement('td');
+      tdTotal.textContent = fmtCurrency(terminal + subs);
+      tdTotal.style.textAlign = 'right';
+      tr.appendChild(tdTotal);
+    }
     frag.appendChild(tr);
   });
   tbody.appendChild(frag);
