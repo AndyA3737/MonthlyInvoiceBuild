@@ -149,6 +149,8 @@ INVOICE_SOURCES = {
         "item_sms":           "SMS",
         "sms_qty_field":      "SMSCredits",
         "sms_price_field":    "SmsUnitPrice",
+        "item_salonspy":      "SalonSpy",
+        "salonspy_field":     "SalonSPYFee",
     },
 }
 
@@ -336,6 +338,15 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
             prev_month = _MONTH_NAMES[(invoice_month - 2) % 12] if invoice_month else ''
             sms_desc = f"SMS Messages (Sent in {prev_month})" if prev_month else "SMS Messages"
             line_items.append({"Quantity": sms_qty, "UnitAmount": round(sms_price, 6), "ItemCode": item_sms, "Description": sms_desc, **tax_override})
+
+    item_salonspy = source_cfg.get('item_salonspy')
+    if item_salonspy:
+        try:
+            salonspy_amount = round(float(str(row.get(source_cfg.get('salonspy_field', '')) or '0').replace(',', '')), 2)
+        except (ValueError, TypeError):
+            salonspy_amount = 0.0
+        if salonspy_amount > 0:
+            line_items.append({"Quantity": 1.0, "UnitAmount": salonspy_amount, "ItemCode": item_salonspy, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
