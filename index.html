@@ -398,11 +398,11 @@ function renderGrid(rows, month, year) {
     subscription: {
       label:      'Subscription Invoices',
       // Include casing variants — only the ones present in the data will be shown
-      colOrder:   ['AccountCode','Tenantname','TenantName','SalonName','Salonname','MonthlyAmount'],
+      colOrder:   ['AccountCode','Tenantname','TenantName','Name','SalonName','Salonname','MonthlyAmount'],
       colRename:  {
         AccountCode:'Account',
         Tenantname:'Tenant', TenantName:'Tenant',
-        SalonName:'Salon',   Salonname:'Salon',
+        Name:'Salon', SalonName:'Salon', Salonname:'Salon',
         MonthlyAmount:'Monthly Amount',
       },
       rightCols:  new Set(['MonthlyAmount']),
