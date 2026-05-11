@@ -366,21 +366,33 @@ def api_invoices():
         sd, ed = month_date_range(month, year)
         rows = fetch(source_cfg['report'], sd, ed)
 
-        # Register any new salons in the mapping (without Xero contact yet)
+        # Register any new salons; update names on existing entries if we now have better data
         changed = False
         for row in rows:
             key = str(row.get('salonid') or row.get('SalonId') or
                       row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
-            if key and key not in _salon_mapping:
+            tenant = (row.get('Tenantname') or row.get('TenantName') or row.get('TENANTNAME') or '')
+            salon  = (row.get('SalonName') or row.get('SALONNAME') or
+                      row.get('Name') or tenant or key)
+            if not key:
+                continue
+            if key not in _salon_mapping:
                 _salon_mapping[key] = {
                     "accountCode":     str(row.get('AccountCode') or row.get('ACCOUNTCODE') or ''),
-                    "salonName":       (row.get('SalonName') or row.get('SALONNAME') or
-                                        row.get('Name') or
-                                        row.get('Tenantname') or row.get('TENANTNAME') or key),
+                    "tenantName":      tenant,
+                    "salonName":       salon,
                     "xeroContactId":   None,
                     "xeroContactName": None,
                 }
                 changed = True
+            else:
+                entry = _salon_mapping[key]
+                if tenant and not entry.get('tenantName'):
+                    entry['tenantName'] = tenant
+                    changed = True
+                if salon and salon != key and not entry.get('salonName'):
+                    entry['salonName'] = salon
+                    changed = True
         if changed:
             _save_mapping_file()
 
@@ -443,16 +455,28 @@ def register_salons():
     salons = (request.get_json(silent=True) or {}).get('salons', [])
     changed = False
     for s in salons:
-        key = s.get('salonId', '') or s.get('accountCode', '')
-        if key and key not in _salon_mapping:
+        key    = s.get('salonId', '') or s.get('accountCode', '')
+        tenant = s.get('tenantName', '')
+        salon  = s.get('salonName', key)
+        if not key:
+            continue
+        if key not in _salon_mapping:
             _salon_mapping[key] = {
                 'accountCode':     s.get('accountCode', ''),
-                'tenantName':      s.get('tenantName', ''),
-                'salonName':       s.get('salonName', key),
+                'tenantName':      tenant,
+                'salonName':       salon,
                 'xeroContactId':   None,
                 'xeroContactName': None,
             }
             changed = True
+        else:
+            entry = _salon_mapping[key]
+            if tenant and not entry.get('tenantName'):
+                entry['tenantName'] = tenant
+                changed = True
+            if salon and salon != key and not entry.get('salonName'):
+                entry['salonName'] = salon
+                changed = True
     if changed:
         _save_mapping_file()
     app.logger.info("register_salons: %d total entries in mapping", len(_salon_mapping))
