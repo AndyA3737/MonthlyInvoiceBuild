@@ -139,13 +139,16 @@ INVOICE_SOURCES = {
         "terminal_vat_inclusive": False,
     },
     "subscription": {
-        "label":          "Subscription Invoices",
-        "report":         "XXX_Export_Admin_TUBR_SubscriptionInvoices",
-        "item_code":      "Monthly",
-        "amount_field":   "MonthlyAmount",
-        "item_terminal":  None,
-        "vat_inclusive":  False,   # VAT-exclusive — Xero adds VAT on top for GBP
+        "label":              "Subscription Invoices",
+        "report":             "XXX_Export_Admin_TUBR_SubscriptionInvoices",
+        "item_code":          "Monthly",
+        "amount_field":       "MonthlyAmount",
+        "item_terminal":      None,
+        "vat_inclusive":      False,   # VAT-exclusive — Xero adds VAT on top for GBP
         "terminal_vat_inclusive": False,
+        "item_sms":           "SMS",
+        "sms_qty_field":      "SMSCredits",
+        "sms_price_field":    "SmsUnitPrice",
     },
 }
 
@@ -316,6 +319,17 @@ def map_to_xero_invoice(row, source_cfg=None):
     line_items = [{"Quantity": 1.0, "UnitAmount": amount, "ItemCode": item_code, **tax_override}]
     if item_terminal and terminal_amount > 0:
         line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": item_terminal, **tax_override})
+
+    item_sms = source_cfg.get('item_sms')
+    if item_sms:
+        try:
+            sms_qty   = float(str(row.get(source_cfg.get('sms_qty_field', '')) or '0').replace(',', ''))
+            sms_price = float(str(row.get(source_cfg.get('sms_price_field', '')) or '0').replace(',', ''))
+            sms_amount = round(sms_qty * sms_price, 2)
+        except (ValueError, TypeError):
+            sms_qty, sms_price, sms_amount = 0.0, 0.0, 0.0
+        if sms_amount > 0:
+            line_items.append({"Quantity": sms_qty, "UnitAmount": round(sms_price, 6), "ItemCode": item_sms, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
