@@ -533,6 +533,7 @@ async function loadXeroContacts() {
     const data = await apiFetch('/api/xero/contacts');
     xeroContacts = data.contacts || [];
     contactsLoaded = true;
+    _contactOptsCache = null;  // invalidate cache so selects get fresh options
   } catch(e) {
     showToast('Could not load Xero contacts: ' + e.message, 'error');
   } finally {
@@ -561,31 +562,35 @@ function renderMappingTable() {
   document.getElementById('mappingEmpty').style.display    = 'none';
   document.getElementById('mappingTableWrap').style.display = '';
 
-  const contactOpts = buildContactOptions();
   const tbody = document.getElementById('mappingBody');
   tbody.innerHTML = '';
   const frag = document.createDocumentFragment();
 
   keys.sort((a, b) => {
-    // Sort by accountCode if available, otherwise by key
     const ac = (savedMapping[a].accountCode || a).toLowerCase();
     const bc = (savedMapping[b].accountCode || b).toLowerCase();
     return ac < bc ? -1 : ac > bc ? 1 : 0;
   }).forEach(salonId => {
-    const entry = savedMapping[salonId];
+    const entry       = savedMapping[salonId];
+    const mapped      = !!entry.xeroContactId;
+    const displayCode = entry.accountCode || salonId;
+
     const tr = document.createElement('tr');
     tr.dataset.code = salonId;
     tr.dataset.name = ((entry.accountCode || '') + ' ' + (entry.salonName || '')).toLowerCase();
 
-    const mapped = !!entry.xeroContactId;
-    const displayCode = entry.accountCode || salonId;
+    // Build select with ONLY the current selection — full options load lazily on focus
+    const currentOpt = entry.xeroContactId
+      ? `<option value="${esc(entry.xeroContactId)}">${esc(entry.xeroContactName || entry.xeroContactId)}</option>`
+      : `<option value="">— Not Mapped —</option>`;
 
     tr.innerHTML = `
       <td style="font-weight:600;color:var(--navy);font-size:13px;">${esc(displayCode)}</td>
       <td style="font-size:13px;">${esc(entry.salonName || '')}</td>
       <td>
-        <select class="contact-select" data-code="${esc(salonId)}" onchange="onMappingChange(this)">
-          ${contactOpts}
+        <select class="contact-select" data-code="${esc(salonId)}"
+                onchange="onMappingChange(this)" onfocus="expandContactOptions(this)">
+          ${currentOpt}
         </select>
       </td>
       <td style="text-align:center;" class="status-cell">
@@ -593,22 +598,24 @@ function renderMappingTable() {
       </td>`;
 
     frag.appendChild(tr);
-
-    // Pre-select current mapping
-    if (entry.xeroContactId) {
-      const sel = tr.querySelector('select');
-      sel.value = entry.xeroContactId;
-      // If option not found (contacts not loaded yet) add a placeholder
-      if (!sel.value && entry.xeroContactName) {
-        const opt = document.createElement('option');
-        opt.value = entry.xeroContactId; opt.textContent = entry.xeroContactName; opt.selected = true;
-        sel.appendChild(opt); sel.value = entry.xeroContactId;
-      }
-    }
   });
 
   tbody.appendChild(frag);
   updateMappingCounter();
+}
+
+// Load all Xero contacts into a select the first time the user clicks it
+let _contactOptsCache = null;
+function expandContactOptions(sel) {
+  if (sel.dataset.expanded) return;
+  sel.dataset.expanded = '1';
+  if (!_contactOptsCache) {
+    _contactOptsCache = buildContactOptions();
+  }
+  const currentVal = sel.value;
+  sel.innerHTML = _contactOptsCache;
+  sel.value = currentVal;
+  if (!sel.value) sel.value = '';
 }
 
 function onMappingChange(sel) {
