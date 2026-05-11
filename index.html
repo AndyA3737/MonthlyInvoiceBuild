@@ -124,6 +124,10 @@
     <h2 style="margin:0 0 20px;font-size:17px;font-weight:700;color:var(--navy);">Select Invoice Period</h2>
     <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
       <div>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Source</label>
+        <select id="sourceSelect" style="min-width:180px;"></select>
+      </div>
+      <div>
         <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Month</label>
         <select id="monthSelect" style="min-width:150px;">
           <option value="1">January</option><option value="2">February</option>
@@ -278,8 +282,21 @@ function initSelectors() {
 
 async function boot() {
   initSelectors();
+  await loadSources();
   await checkXeroStatus();
   await loadSavedMapping();
+}
+
+async function loadSources() {
+  try {
+    const sources = await apiFetch('/api/sources');
+    const sel = document.getElementById('sourceSelect');
+    sel.innerHTML = '';
+    sources.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id; opt.textContent = s.label; sel.appendChild(opt);
+    });
+  } catch(e) { console.error('Could not load sources', e); }
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -349,7 +366,8 @@ async function loadInvoices() {
   btn.disabled = true;
   showLoading('Fetching invoices from SalonIQ LIVE…');
   try {
-    const data = await apiFetch(`/api/invoices?month=${month}&year=${year}`);
+    const source = document.getElementById('sourceSelect').value || 'stripe';
+    const data = await apiFetch(`/api/invoices?month=${month}&year=${year}&source=${source}`);
     currentData = data.data || [];
     renderGrid(currentData, +month, +year);
     await checkXeroStatus();
@@ -430,7 +448,8 @@ async function exportToXero() {
   btn.disabled = true;
   btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;"></span> Exporting…';
   try {
-    const data = await apiFetch('/api/xero/export', 'POST', { invoices: currentData });
+    const source = document.getElementById('sourceSelect').value || 'stripe';
+    const data = await apiFetch('/api/xero/export', 'POST', { invoices: currentData, source });
     if (data.success) showToast(`Exported ${data.created} invoice${data.created !== 1 ? 's' : ''} to Xero as DRAFT`, 'success');
     else if (data.created !== undefined) showToast(`Partial: ${data.created} created. Errors: ${(data.errors||[]).join(' | ')}`, 'error');
     else throw new Error(data.error || 'Export failed');

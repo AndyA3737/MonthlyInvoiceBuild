@@ -123,6 +123,30 @@ def require_auth(f):
     return decorated
 
 
+# ── Invoice source configuration ─────────────────────────────────────────────
+# Each source defines the SalonIQ report and the Xero item codes to use.
+# vat_inclusive: True  = amount includes VAT (divide by 1.2 for net)
+#                False = amount is net (Xero adds VAT on top)
+
+INVOICE_SOURCES = {
+    "stripe": {
+        "label":          "Stripe Invoices",
+        "report":         "XXX_Export_Admin_TUBR_StripeInvoices",
+        "item_code":      "IQPay",
+        "item_terminal":  "IQPayTerminal",
+        "vat_inclusive":  True,
+        "terminal_vat_inclusive": False,
+    },
+    "subscription": {
+        "label":          "Subscription Invoices",
+        "report":         "XXX_Export_Admin_TUBR_SubscriptionInvoices",
+        "item_code":      "IQSubscription",   # update once confirmed
+        "item_terminal":  None,
+        "vat_inclusive":  True,               # update once confirmed
+        "terminal_vat_inclusive": False,
+    },
+}
+
 # ── SalonIQ LIVE API ─────────────────────────────────────────────────────────
 
 LIVE_SERVER = {
@@ -236,9 +260,14 @@ def _parse_amount(val):
     return amount
 
 
-def map_to_xero_invoice(row, item_code=None):
-    """Map a SalonIQ StripeInvoices row to a Xero invoice dict."""
-    item_code = item_code or XERO_ACCOUNT_CODE
+def map_to_xero_invoice(row, source_cfg=None):
+    """Map a SalonIQ invoice row to a Xero invoice dict using the source config."""
+    if source_cfg is None:
+        source_cfg = INVOICE_SOURCES['stripe']
+    item_code         = source_cfg['item_code']
+    item_terminal     = source_cfg.get('item_terminal')
+    vat_inclusive     = source_cfg.get('vat_inclusive', True)
+    term_vat_inclusive = source_cfg.get('terminal_vat_inclusive', False)
     # Use salonid (UUID) as the stable mapping key; fall back to AccountCode
     salon_key = str(row.get('salonid') or row.get('SalonId') or
                     row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
@@ -258,27 +287,30 @@ def map_to_xero_invoice(row, item_code=None):
     currency = (_salon_mapping.get(salon_key) or {}).get('xeroContactCurrency', '') or 'GBP'
     is_gbp   = currency.upper() == 'GBP'
 
-    # TotalBill: GBP = VAT-inclusive (divide by 1.2), non-GBP = no VAT (pass as-is)
+    # Main bill — apply VAT treatment based on source config and currency
     try:
         gross  = float(str(row.get('TotalBill') or row.get('TOTALBILL') or '0').replace(',', ''))
-        amount = round(gross / 1.2, 2) if is_gbp else round(gross, 2)
+        apply_vat = vat_inclusive and is_gbp
+        amount = round(gross / 1.2, 2) if apply_vat else round(gross, 2)
     except (ValueError, TypeError):
         amount = 0.0
 
-    # TerminalBill: GBP = VAT-exclusive (Xero adds VAT), non-GBP = no VAT
+    # Terminal bill (if this source supports it)
     try:
-        terminal_amount = round(float(str(row.get('TerminalBill') or row.get('TERMINALBILL') or '0').replace(',', '')), 2)
+        terminal_gross  = float(str(row.get('TerminalBill') or row.get('TERMINALBILL') or '0').replace(',', ''))
+        apply_term_vat  = term_vat_inclusive and is_gbp
+        terminal_amount = round(terminal_gross / 1.2, 2) if apply_term_vat else round(terminal_gross, 2)
     except (ValueError, TypeError):
         terminal_amount = 0.0
 
     # AccountCode (e.g. ABS003) used as the Xero invoice reference
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
-    # Build line items — non-GBP invoices explicitly set TaxType NONE
+    # Build line items — non-GBP invoices get TaxType NONE
     tax_override = {} if is_gbp else {"TaxType": "NONE"}
     line_items = [{"Quantity": 1.0, "UnitAmount": amount, "ItemCode": item_code, **tax_override}]
-    if terminal_amount > 0:
-        line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": "IQPayTerminal", **tax_override})
+    if item_terminal and terminal_amount > 0:
+        line_items.append({"Quantity": 1.0, "UnitAmount": terminal_amount, "ItemCode": item_terminal, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
@@ -305,6 +337,12 @@ def index():
     return send_from_directory(BASE_DIR, 'index.html')
 
 
+@app.route('/api/sources')
+@require_auth
+def api_sources():
+    return jsonify([{"id": k, "label": v["label"]} for k, v in INVOICE_SOURCES.items()])
+
+
 @app.route('/api/invoices')
 @require_auth
 def api_invoices():
@@ -317,9 +355,12 @@ def api_invoices():
     if not (1 <= month <= 12 and 2020 <= year <= 2099):
         return jsonify({"error": "Month must be 1–12, year must be 2020–2099"}), 400
 
+    source_id  = request.args.get('source', 'stripe')
+    source_cfg = INVOICE_SOURCES.get(source_id, INVOICE_SOURCES['stripe'])
+
     try:
         sd, ed = month_date_range(month, year)
-        rows = fetch("XXX_Export_Admin_TUBR_StripeInvoices", sd, ed)
+        rows = fetch(source_cfg['report'], sd, ed)
 
         # Register any new salons in the mapping (without Xero contact yet)
         changed = False
@@ -536,13 +577,14 @@ def xero_export():
         return jsonify({"error": "Not connected to Xero — please click Connect Xero"}), 403
 
     body = request.get_json(silent=True) or {}
-    invoices = body.get('invoices', [])
-    item_code = "IQPay"
+    invoices  = body.get('invoices', [])
+    source_id  = body.get('source', 'stripe')
+    source_cfg = INVOICE_SOURCES.get(source_id, INVOICE_SOURCES['stripe'])
     if not invoices:
         return jsonify({"error": "No invoices provided"}), 400
 
     try:
-        xero_invs = [map_to_xero_invoice(row, item_code) for row in invoices]
+        xero_invs = [map_to_xero_invoice(row, source_cfg) for row in invoices]
         created_total = 0
         errors = []
         BATCH_SIZE = 50
