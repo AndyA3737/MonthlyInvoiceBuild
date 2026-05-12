@@ -158,6 +158,9 @@ INVOICE_SOURCES = {
         "hardware_field":     "MonthlyHardwareAmount",
         "item_salonapp":      "MonthlySalonApp",
         "salonapp_field":     "MonthlySalonAppAmount",
+        "item_twowaysms":         "TwoWaySMS",
+        "twowaysms_qty_field":    "IncomingMessagecount",
+        "twowaysms_price_field":  "IncomingSMSCost",
     },
 }
 
@@ -383,6 +386,17 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
             salonapp_amount = 0.0
         if salonapp_amount > 0:
             line_items.append({"Quantity": 1.0, "UnitAmount": salonapp_amount, "ItemCode": item_salonapp, **tax_override})
+
+    item_twowaysms = source_cfg.get('item_twowaysms')
+    if item_twowaysms:
+        try:
+            tws_qty   = float(str(row.get(source_cfg.get('twowaysms_qty_field', '')) or '0').replace(',', ''))
+            tws_price = float(str(row.get(source_cfg.get('twowaysms_price_field', '')) or '0').replace(',', ''))
+            tws_amount = round(tws_qty * tws_price, 2)
+        except (ValueError, TypeError):
+            tws_qty, tws_price, tws_amount = 0.0, 0.0, 0.0
+        if tws_amount > 0:
+            line_items.append({"Quantity": tws_qty, "UnitAmount": round(tws_price, 6), "ItemCode": item_twowaysms, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
