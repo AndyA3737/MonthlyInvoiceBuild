@@ -154,6 +154,8 @@ INVOICE_SOURCES = {
         "item_postcode":      "PostCode",
         "postcode_qty_field": "PostCodeCredits",
         "postcode_price_field": "PricePerPostcodeLookup",
+        "item_hardware":      "HardwareMaint",
+        "hardware_field":     "MonthlyHardwareAmount",
     },
 }
 
@@ -361,6 +363,15 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
             pc_qty, pc_price, pc_amount = 0.0, 0.0, 0.0
         if pc_amount > 0:
             line_items.append({"Quantity": pc_qty, "UnitAmount": round(pc_price, 6), "ItemCode": item_postcode, **tax_override})
+
+    item_hardware = source_cfg.get('item_hardware')
+    if item_hardware:
+        try:
+            hardware_amount = round(float(str(row.get(source_cfg.get('hardware_field', '')) or '0').replace(',', '')), 2)
+        except (ValueError, TypeError):
+            hardware_amount = 0.0
+        if hardware_amount > 0:
+            line_items.append({"Quantity": 1.0, "UnitAmount": hardware_amount, "ItemCode": item_hardware, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
