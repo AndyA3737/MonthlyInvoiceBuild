@@ -151,6 +151,9 @@ INVOICE_SOURCES = {
         "sms_price_field":    "SmsUnitPrice",
         "item_salonspy":      "SalonSpy",
         "salonspy_field":     "SalonSPYFee",
+        "item_postcode":      "PostCode",
+        "postcode_qty_field": "PostCodeCredits",
+        "postcode_price_field": "PricePerPostcodeLookup",
     },
 }
 
@@ -347,6 +350,17 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
             salonspy_amount = 0.0
         if salonspy_amount > 0:
             line_items.append({"Quantity": 1.0, "UnitAmount": salonspy_amount, "ItemCode": item_salonspy, **tax_override})
+
+    item_postcode = source_cfg.get('item_postcode')
+    if item_postcode:
+        try:
+            pc_qty   = float(str(row.get(source_cfg.get('postcode_qty_field', '')) or '0').replace(',', ''))
+            pc_price = float(str(row.get(source_cfg.get('postcode_price_field', '')) or '0').replace(',', ''))
+            pc_amount = round(pc_qty * pc_price, 2)
+        except (ValueError, TypeError):
+            pc_qty, pc_price, pc_amount = 0.0, 0.0, 0.0
+        if pc_amount > 0:
+            line_items.append({"Quantity": pc_qty, "UnitAmount": round(pc_price, 6), "ItemCode": item_postcode, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
