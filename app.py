@@ -137,6 +137,7 @@ INVOICE_SOURCES = {
         "item_terminal":  "IQPayTerminal",
         "vat_inclusive":  True,
         "terminal_vat_inclusive": False,
+        "invoice_date":   "last",
     },
     "subscription": {
         "label":              "Subscription Invoices",
@@ -146,6 +147,7 @@ INVOICE_SOURCES = {
         "item_terminal":      None,
         "vat_inclusive":      False,   # VAT-exclusive — Xero adds VAT on top for GBP
         "terminal_vat_inclusive": False,
+        "invoice_date":       "first",
         "item_sms":           "SMS",
         "sms_qty_field":      "SMSCredits",
         "sms_price_field":    "SmsUnitPrice",
@@ -281,7 +283,7 @@ _MONTH_NAMES = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
 
 
-def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
+def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
     """Map a SalonIQ invoice row to a Xero invoice dict using the source config."""
     if source_cfg is None:
         source_cfg = INVOICE_SOURCES['stripe']
@@ -303,8 +305,15 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0):
                 'Unknown Customer')
         contact = {"Name": str(name)}
 
-    # InvoiceDate format from LIVE API: "4/30/2026 12:00:00 AM"
-    inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
+    # Date: driven by source config when month/year are known
+    date_rule = source_cfg.get('invoice_date', '')
+    if invoice_month and invoice_year and date_rule == 'first':
+        inv_date = date(invoice_year, invoice_month, 1).strftime('%Y-%m-%d')
+    elif invoice_month and invoice_year and date_rule == 'last':
+        _, last_day = monthrange(invoice_year, invoice_month)
+        inv_date = date(invoice_year, invoice_month, last_day).strftime('%Y-%m-%d')
+    else:
+        inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
     # Determine currency from mapping — drives VAT treatment
     currency = (_salon_mapping.get(salon_key) or {}).get('xeroContactCurrency', '') or 'GBP'
@@ -695,11 +704,12 @@ def xero_export():
     source_id  = body.get('source', 'stripe')
     source_cfg = INVOICE_SOURCES.get(source_id, INVOICE_SOURCES['stripe'])
     invoice_month = int(body.get('month', 0) or 0)
+    invoice_year  = int(body.get('year',  0) or 0)
     if not invoices:
         return jsonify({"error": "No invoices provided"}), 400
 
     try:
-        xero_invs = [map_to_xero_invoice(row, source_cfg, invoice_month=invoice_month) for row in invoices]
+        xero_invs = [map_to_xero_invoice(row, source_cfg, invoice_month=invoice_month, invoice_year=invoice_year) for row in invoices]
         created_total = 0
         errors = []
         BATCH_SIZE = 50

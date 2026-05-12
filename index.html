@@ -488,7 +488,8 @@ async function exportToXero() {
   try {
     const source = document.getElementById('sourceSelect').value || 'stripe';
     const month  = +document.getElementById('monthSelect').value;
-    const data = await apiFetch('/api/xero/export', 'POST', { invoices: currentData, source, month });
+    const year   = +document.getElementById('yearSelect').value;
+    const data = await apiFetch('/api/xero/export', 'POST', { invoices: currentData, source, month, year });
     if (data.success) showToast(`Exported ${data.created} invoice${data.created !== 1 ? 's' : ''} to Xero as DRAFT`, 'success');
     else if (data.created !== undefined) showToast(`Partial: ${data.created} created. Errors: ${(data.errors||[]).join(' | ')}`, 'error');
     else throw new Error(data.error || 'Export failed');
