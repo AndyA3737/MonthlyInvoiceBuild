@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """SalonIQ Monthly Invoice Builder — fetches Stripe invoices and exports to Xero."""
 
+import csv
+import io
 import os
 import base64
 import json
@@ -593,6 +595,74 @@ def clear_mapping():
     _salon_mapping.clear()
     _save_mapping_file()
     return jsonify({"success": True})
+
+
+_MAPPING_CSV_FIELDS = ['salonId','accountCode','tenantName','salonName',
+                       'xeroContactId','xeroContactName','xeroContactCurrency']
+
+@app.route('/api/mapping/export')
+@require_auth
+def export_mapping_csv():
+    si = io.StringIO()
+    writer = csv.DictWriter(si, fieldnames=_MAPPING_CSV_FIELDS)
+    writer.writeheader()
+    for salon_id, entry in sorted(_salon_mapping.items(),
+                                  key=lambda x: (x[1].get('accountCode') or x[0]).lower()):
+        writer.writerow({
+            'salonId':             salon_id,
+            'accountCode':         entry.get('accountCode', ''),
+            'tenantName':          entry.get('tenantName', ''),
+            'salonName':           entry.get('salonName', ''),
+            'xeroContactId':       entry.get('xeroContactId') or '',
+            'xeroContactName':     entry.get('xeroContactName') or '',
+            'xeroContactCurrency': entry.get('xeroContactCurrency') or '',
+        })
+    return Response(
+        si.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=salon_mapping.csv'},
+    )
+
+
+@app.route('/api/mapping/import', methods=['POST'])
+@require_auth
+def import_mapping_csv():
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'error': 'No file uploaded'}), 400
+    try:
+        stream = io.StringIO(f.stream.read().decode('utf-8-sig'))
+        reader = csv.DictReader(stream)
+        updated = 0
+        for row in reader:
+            salon_id = row.get('salonId', '').strip()
+            if not salon_id:
+                continue
+            if salon_id not in _salon_mapping:
+                _salon_mapping[salon_id] = {
+                    'accountCode':         row.get('accountCode', ''),
+                    'tenantName':          row.get('tenantName', ''),
+                    'salonName':           row.get('salonName', ''),
+                    'xeroContactId':       row.get('xeroContactId') or None,
+                    'xeroContactName':     row.get('xeroContactName') or None,
+                    'xeroContactCurrency': row.get('xeroContactCurrency') or None,
+                }
+            else:
+                entry = _salon_mapping[salon_id]
+                if row.get('xeroContactId'):
+                    entry['xeroContactId']       = row['xeroContactId']
+                    entry['xeroContactName']     = row.get('xeroContactName') or None
+                    entry['xeroContactCurrency'] = row.get('xeroContactCurrency') or None
+                if row.get('tenantName') and not entry.get('tenantName'):
+                    entry['tenantName'] = row['tenantName']
+                if row.get('salonName') and not entry.get('salonName'):
+                    entry['salonName'] = row['salonName']
+            updated += 1
+        _save_mapping_file()
+        return jsonify({'success': True, 'updated': updated, 'total': len(_salon_mapping)})
+    except Exception as e:
+        app.logger.exception('Mapping import failed')
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/auth/xero')

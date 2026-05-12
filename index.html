@@ -203,6 +203,16 @@
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <span id="mappingCounter" style="font-size:13px;color:var(--muted);"></span>
+        <button class="btn btn-outline btn-sm" id="unmappedFilterBtn" onclick="toggleUnmappedFilter()">Show Unmapped</button>
+        <button class="btn btn-outline btn-sm" onclick="exportMappingCsv()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Import CSV
+          <input type="file" accept=".csv" style="display:none;" onchange="importMappingCsv(this)">
+        </label>
         <button class="btn btn-outline btn-sm" id="loadContactsBtn" onclick="loadXeroContacts()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
           Reload Xero Contacts
@@ -666,11 +676,42 @@ async function saveMapping() {
   } catch(e) { showToast('Save failed: ' + e.message, 'error'); }
 }
 
+let _unmappedOnly = false;
+function toggleUnmappedFilter() {
+  _unmappedOnly = !_unmappedOnly;
+  const btn = document.getElementById('unmappedFilterBtn');
+  btn.textContent = _unmappedOnly ? 'Show All' : 'Show Unmapped';
+  btn.className   = _unmappedOnly ? 'btn btn-teal btn-sm' : 'btn btn-outline btn-sm';
+  filterMappingTable();
+}
+
 function filterMappingTable() {
   const q = document.getElementById('mappingSearch').value.toLowerCase();
   document.querySelectorAll('#mappingBody tr').forEach(tr => {
-    tr.style.display = (!q || tr.dataset.name.includes(q) || tr.dataset.code.toLowerCase().includes(q)) ? '' : 'none';
+    const mapped = savedMapping[tr.dataset.code] && savedMapping[tr.dataset.code].xeroContactId;
+    const matchSearch = !q || tr.dataset.name.includes(q) || tr.dataset.code.toLowerCase().includes(q);
+    const matchFilter = !_unmappedOnly || !mapped;
+    tr.style.display = (matchSearch && matchFilter) ? '' : 'none';
   });
+}
+
+function exportMappingCsv() {
+  window.location.href = '/api/mapping/export';
+}
+
+async function importMappingCsv(input) {
+  if (!input.files.length) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  input.value = '';
+  try {
+    const res = await fetch('/api/mapping/import', { method: 'POST', credentials: 'same-origin', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`Imported ${data.updated} entries — ${data.total} total`, 'success');
+    await loadSavedMapping();
+    updateMappingBadge();
+  } catch(e) { showToast('Import failed: ' + e.message, 'error'); }
 }
 
 function updateMappingCounter() {
