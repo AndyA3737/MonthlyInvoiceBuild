@@ -162,9 +162,10 @@ INVOICE_SOURCES = {
         "hardware_field":     "MonthlyHardwareAmount",
         "item_salonapp":      "MonthlySalonApp",
         "salonapp_field":     "MonthlySalonAppAmount",
-        "item_twowaysms":         "TwoWaySMS",
-        "twowaysms_qty_field":    "IncomingMessagecount",
-        "twowaysms_price_field":  "IncomingSMSCost",
+        "item_twowaysms":             "TwoWaySMS",
+        "twowaysms_fixed_field":      "SMSTextBackMonthlyAmount",
+        "twowaysms_qty_field":        "IncomingMessagecount",
+        "twowaysms_price_field":      "IncomingSMSCost",
     },
 }
 
@@ -401,15 +402,22 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
     item_twowaysms = source_cfg.get('item_twowaysms')
     if item_twowaysms:
         try:
-            tws_qty   = float(str(row.get(source_cfg.get('twowaysms_qty_field', '')) or '0').replace(',', ''))
-            tws_price = float(str(row.get(source_cfg.get('twowaysms_price_field', '')) or '0').replace(',', ''))
-            tws_amount = round(tws_qty * tws_price, 2)
+            fixed_amount = round(float(str(row.get(source_cfg.get('twowaysms_fixed_field', '')) or '0').replace(',', '')), 2)
         except (ValueError, TypeError):
-            tws_qty, tws_price, tws_amount = 0.0, 0.0, 0.0
-        if tws_amount > 0:
-            prev_month = _MONTH_NAMES[(invoice_month - 2) % 12] if invoice_month else ''
-            tws_desc = f"Incoming Messages in {prev_month} ({int(tws_qty)})" if prev_month else f"Incoming Messages ({int(tws_qty)})"
-            line_items.append({"Quantity": tws_qty, "UnitAmount": round(tws_price, 6), "ItemCode": item_twowaysms, "Description": tws_desc, **tax_override})
+            fixed_amount = 0.0
+        if fixed_amount > 0:
+            line_items.append({"Quantity": 1.0, "UnitAmount": fixed_amount, "ItemCode": item_twowaysms, "Description": "Monthly SMS Text Back Charge", **tax_override})
+        else:
+            try:
+                tws_qty   = float(str(row.get(source_cfg.get('twowaysms_qty_field', '')) or '0').replace(',', ''))
+                tws_price = float(str(row.get(source_cfg.get('twowaysms_price_field', '')) or '0').replace(',', ''))
+                tws_amount = round(tws_qty * tws_price, 2)
+            except (ValueError, TypeError):
+                tws_qty, tws_price, tws_amount = 0.0, 0.0, 0.0
+            if tws_amount > 0:
+                prev_month = _MONTH_NAMES[(invoice_month - 2) % 12] if invoice_month else ''
+                tws_desc = f"Incoming Messages in {prev_month} ({int(tws_qty)})" if prev_month else f"Incoming Messages ({int(tws_qty)})"
+                line_items.append({"Quantity": tws_qty, "UnitAmount": round(tws_price, 6), "ItemCode": item_twowaysms, "Description": tws_desc, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
