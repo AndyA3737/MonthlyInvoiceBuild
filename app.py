@@ -178,6 +178,9 @@ LIVE_SERVER = {
     "date_fmt": "%d/%m/%Y",
 }
 
+SALONIQ_SMARTDEBIT_URL   = "https://loki.saloniq.co.uk/api/UpdateSalonSmartDebitId"
+SALONIQ_SMARTDEBIT_TOKEN = "SDIA1B2C3"
+
 API_COMMON = dict(Salonid="", UserID="", data1="", data2="", data3="", data4="")
 
 
@@ -211,6 +214,24 @@ def month_date_range(month, year):
     _, days = monthrange(year, month)
     fmt = LIVE_SERVER["date_fmt"]
     return date(year, month, 1).strftime(fmt), date(year, month, days).strftime(fmt)
+
+
+def _push_smartdebit_id(salonid, xero_contact_id):
+    """Write the Xero contact ID back to SalonIQ as smartdebitId for the given salon."""
+    try:
+        r = requests.get(
+            SALONIQ_SMARTDEBIT_URL,
+            params={
+                "TokenID":      SALONIQ_SMARTDEBIT_TOKEN,
+                "salonid":      salonid,
+                "smartdebitid": xero_contact_id,
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        app.logger.info("Pushed smartdebitId salon=%s → %s", salonid, xero_contact_id)
+    except Exception as e:
+        app.logger.warning("Could not push smartdebitId salon=%s: %s", salonid, e)
 
 
 # ── Xero helpers ─────────────────────────────────────────────────────────────
@@ -300,7 +321,11 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
                     row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
     mapped = _salon_mapping.get(salon_key)
 
-    if mapped and mapped.get('xeroContactId'):
+    # smartdebitId in the report row is the authoritative Xero contact ID stored in SalonIQ
+    smart_id = str(row.get('smartdebitId') or row.get('SmartDebitId') or '').strip()
+    if smart_id:
+        contact = {"ContactID": smart_id}
+    elif mapped and mapped.get('xeroContactId'):
         contact = {"ContactID": mapped['xeroContactId']}
     else:
         name = (row.get('SalonName') or row.get('SALONNAME') or row.get('Name') or
@@ -593,6 +618,10 @@ def save_mapping():
     _salon_mapping.clear()
     _salon_mapping.update(data)
     _save_mapping_file()
+    for salonid, entry in _salon_mapping.items():
+        xero_id = entry.get('xeroContactId')
+        if xero_id:
+            _push_smartdebit_id(salonid, xero_id)
     mapped = sum(1 for v in _salon_mapping.values() if v.get('xeroContactId'))
     return jsonify({"success": True, "total": len(_salon_mapping), "mapped": mapped})
 
@@ -667,6 +696,10 @@ def import_mapping_csv():
                     entry['salonName'] = row['salonName']
             updated += 1
         _save_mapping_file()
+        for salonid, entry in _salon_mapping.items():
+            xero_id = entry.get('xeroContactId')
+            if xero_id:
+                _push_smartdebit_id(salonid, xero_id)
         return jsonify({'success': True, 'updated': updated, 'total': len(_salon_mapping)})
     except Exception as e:
         app.logger.exception('Mapping import failed')
