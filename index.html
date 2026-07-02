@@ -527,7 +527,7 @@ function resolveContactNames() {
   const byId = {};
   xeroContacts.forEach(c => { byId[c.id] = c; });
   Object.values(savedMapping).forEach(entry => {
-    if (entry.xeroContactId && !entry.xeroContactName) {
+    if (entry.xeroContactId) {
       const c = byId[entry.xeroContactId];
       if (c) {
         entry.xeroContactName     = c.name;
