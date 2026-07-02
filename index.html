@@ -265,8 +265,9 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 
 let currentData   = [];
 let xeroContacts  = [];   // [{id, name}] from Xero
-let savedMapping  = {};   // ACCOUNTCODE -> {salonName, xeroContactId, xeroContactName}
-let contactsLoaded = false;
+let savedMapping   = {};   // ACCOUNTCODE -> {salonName, xeroContactId, xeroContactName}
+let contactsLoaded  = false;
+let contactsLoading = false;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
@@ -309,7 +310,7 @@ function switchTab(tab) {
   });
   if (tab === 'mapping') {
     renderMappingTable();
-    if (!contactsLoaded) loadXeroContacts();
+    if (!contactsLoaded && !contactsLoading) loadXeroContacts();
   }
 }
 
@@ -372,6 +373,7 @@ async function loadInvoices() {
     await checkXeroStatus();
     registerSalonsFromData(currentData);
     updateMappingBadge();
+    if (!contactsLoaded && !contactsLoading) loadXeroContacts();
     if (!currentData.length) { showEmpty(); showToast('No invoices found for this period', 'info'); }
     else showToast(`Loaded ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''}`, 'success');
   } catch(e) { showEmpty(); showToast('Error: ' + e.message, 'error'); }
@@ -538,6 +540,8 @@ function resolveContactNames() {
 }
 
 async function loadXeroContacts() {
+  if (contactsLoading) return;
+  contactsLoading = true;
   document.getElementById('mappingLoading').style.display = '';
   document.getElementById('mappingTableWrap').style.display = 'none';
   document.getElementById('mappingEmpty').style.display = 'none';
@@ -551,6 +555,7 @@ async function loadXeroContacts() {
   } catch(e) {
     showToast('Could not load Xero contacts: ' + e.message, 'error');
   } finally {
+    contactsLoading = false;
     document.getElementById('mappingLoading').style.display = 'none';
     document.getElementById('loadContactsBtn').disabled = false;
     renderMappingTable();
