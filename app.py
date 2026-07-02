@@ -219,7 +219,7 @@ def month_date_range(month, year):
 def _push_smartdebit_id(salonid, xero_contact_id):
     """Write the Xero contact ID back to SalonIQ. Returns None on success, error string on failure."""
     try:
-        r = requests.get(
+        r = requests.post(
             SALONIQ_SMARTDEBIT_URL,
             params={
                 "TokenID":      SALONIQ_SMARTDEBIT_TOKEN,
