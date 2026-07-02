@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """SalonIQ Monthly Invoice Builder — fetches Stripe invoices and exports to Xero."""
 
-import csv
-import io
 import os
 import base64
 import json
@@ -45,13 +43,10 @@ XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 
 # Token persistence — survives restarts when a Railway Volume is mounted at /data
 # Set XERO_TOKEN_FILE env var to override (default: /data/xero_tokens.json)
-TOKEN_FILE   = os.environ.get('XERO_TOKEN_FILE',   '/data/xero_tokens.json')
-MAPPING_FILE = os.environ.get('XERO_MAPPING_FILE', '/data/salon_mapping.json')
+TOKEN_FILE   = os.environ.get('XERO_TOKEN_FILE', '/data/xero_tokens.json')
 
-_xero_state    = None   # CSRF token for OAuth flow
-_xero_tokens   = {}     # access_token, refresh_token, expires_at, tenant_id, tenant_name
-# ACCOUNTCODE -> {salonName, xeroContactId, xeroContactName}
-_salon_mapping = {}
+_xero_state  = None   # CSRF token for OAuth flow
+_xero_tokens = {}     # access_token, refresh_token, expires_at, tenant_id, tenant_name
 
 
 def _load_tokens():
@@ -75,27 +70,6 @@ def _save_tokens():
 
 
 _load_tokens()
-
-
-def _load_mapping():
-    try:
-        with open(MAPPING_FILE) as f:
-            _salon_mapping.update(json.load(f))
-        app.logger.info("Loaded salon mapping from %s", MAPPING_FILE)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        pass
-
-
-def _save_mapping_file():
-    try:
-        os.makedirs(os.path.dirname(MAPPING_FILE), exist_ok=True)
-        with open(MAPPING_FILE, 'w') as f:
-            json.dump(dict(_salon_mapping), f, indent=2)
-    except OSError as e:
-        app.logger.warning("Could not save mapping to %s: %s", MAPPING_FILE, e)
-
-
-_load_mapping()
 
 
 # ── Basic auth ───────────────────────────────────────────────────────────────
@@ -319,17 +293,10 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
     item_terminal      = source_cfg.get('item_terminal')
     vat_inclusive      = source_cfg.get('vat_inclusive', True)
     term_vat_inclusive = source_cfg.get('terminal_vat_inclusive', False)
-    # Use salonid (UUID) as the stable mapping key; fall back to AccountCode
-    salon_key = str(row.get('salonid') or row.get('SalonId') or
-                    row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
-    mapped = _salon_mapping.get(salon_key)
-
-    # smartdebitId in the report row is the authoritative Xero contact ID stored in SalonIQ
+    # smartdebitId in the report row is the Xero contact ID stored in SalonIQ
     smart_id = str(row.get('smartdebitId') or row.get('SmartDebitId') or '').strip()
     if smart_id:
         contact = {"ContactID": smart_id}
-    elif mapped and mapped.get('xeroContactId'):
-        contact = {"ContactID": mapped['xeroContactId']}
     else:
         name = (row.get('SalonName') or row.get('SALONNAME') or row.get('Name') or
                 next((str(v) for k, v in row.items() if k.lower() == 'tenantname' and v), '') or
@@ -346,9 +313,8 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
     else:
         inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
-    # Determine currency from mapping — drives VAT treatment
-    currency = (_salon_mapping.get(salon_key) or {}).get('xeroContactCurrency', '') or 'GBP'
-    is_gbp   = currency.upper() == 'GBP'
+    currency = 'GBP'
+    is_gbp   = True
 
     # Main bill — use configured amount field, apply VAT based on source and currency
     try:
@@ -496,37 +462,6 @@ def api_invoices():
     try:
         sd, ed = month_date_range(month, year)
         rows = fetch(source_cfg['report'], sd, ed)
-
-        # Register any new salons; update names on existing entries if we now have better data
-        changed = False
-        for row in rows:
-            key = str(row.get('salonid') or row.get('SalonId') or
-                      row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
-            tenant = next((str(v) for k, v in row.items() if k.lower() == 'tenantname' and v), '')
-            salon  = (row.get('SalonName') or row.get('SALONNAME') or
-                      row.get('Name') or tenant or key)
-            if not key:
-                continue
-            if key not in _salon_mapping:
-                _salon_mapping[key] = {
-                    "accountCode":     str(row.get('AccountCode') or row.get('ACCOUNTCODE') or ''),
-                    "tenantName":      tenant,
-                    "salonName":       salon,
-                    "xeroContactId":   None,
-                    "xeroContactName": None,
-                }
-                changed = True
-            else:
-                entry = _salon_mapping[key]
-                if tenant and not entry.get('tenantName'):
-                    entry['tenantName'] = tenant
-                    changed = True
-                if salon and salon != key and not entry.get('salonName'):
-                    entry['salonName'] = salon
-                    changed = True
-        if changed:
-            _save_mapping_file()
-
         return jsonify({"data": rows, "count": len(rows)})
     except Exception as e:
         app.logger.exception("Error fetching invoices")
@@ -573,56 +508,12 @@ def xero_contacts():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/mapping', methods=['GET'])
-@require_auth
-def get_mapping():
-    return jsonify(_salon_mapping)
-
-
-@app.route('/api/mapping/register', methods=['POST'])
-@require_auth
-def register_salons():
-    """Register salons sent from the frontend after invoice load."""
-    salons = (request.get_json(silent=True) or {}).get('salons', [])
-    changed = False
-    for s in salons:
-        key    = s.get('salonId', '') or s.get('accountCode', '')
-        tenant = s.get('tenantName', '')
-        salon  = s.get('salonName', key)
-        if not key:
-            continue
-        if key not in _salon_mapping:
-            _salon_mapping[key] = {
-                'accountCode':     s.get('accountCode', ''),
-                'tenantName':      tenant,
-                'salonName':       salon,
-                'xeroContactId':   None,
-                'xeroContactName': None,
-            }
-            changed = True
-        else:
-            entry = _salon_mapping[key]
-            if tenant and not entry.get('tenantName'):
-                entry['tenantName'] = tenant
-                changed = True
-            if salon and salon != key and not entry.get('salonName'):
-                entry['salonName'] = salon
-                changed = True
-    if changed:
-        _save_mapping_file()
-    app.logger.info("register_salons: %d total entries in mapping", len(_salon_mapping))
-    return jsonify({'success': True, 'total': len(_salon_mapping)})
-
-
 @app.route('/api/mapping', methods=['POST'])
 @require_auth
 def save_mapping():
     data = request.get_json(silent=True) or {}
-    _salon_mapping.clear()
-    _salon_mapping.update(data)
-    _save_mapping_file()
     push_failures = []
-    for salonid, entry in _salon_mapping.items():
+    for salonid, entry in data.items():
         xero_id = entry.get('xeroContactId')
         if xero_id:
             err = _push_smartdebit_id(salonid, xero_id)
@@ -631,96 +522,9 @@ def save_mapping():
                     "salonName": entry.get('salonName') or salonid,
                     "error": err,
                 })
-    mapped = sum(1 for v in _salon_mapping.values() if v.get('xeroContactId'))
-    return jsonify({"success": True, "total": len(_salon_mapping), "mapped": mapped,
+    mapped = sum(1 for v in data.values() if v.get('xeroContactId'))
+    return jsonify({"success": True, "total": len(data), "mapped": mapped,
                     "pushFailures": push_failures})
-
-
-@app.route('/api/mapping/clear', methods=['POST'])
-@require_auth
-def clear_mapping():
-    _salon_mapping.clear()
-    _save_mapping_file()
-    return jsonify({"success": True})
-
-
-_MAPPING_CSV_FIELDS = ['salonId','accountCode','tenantName','salonName',
-                       'xeroContactId','xeroContactName','xeroContactCurrency']
-
-@app.route('/api/mapping/export')
-@require_auth
-def export_mapping_csv():
-    si = io.StringIO()
-    writer = csv.DictWriter(si, fieldnames=_MAPPING_CSV_FIELDS)
-    writer.writeheader()
-    for salon_id, entry in sorted(_salon_mapping.items(),
-                                  key=lambda x: (x[1].get('accountCode') or x[0]).lower()):
-        writer.writerow({
-            'salonId':             salon_id,
-            'accountCode':         entry.get('accountCode', ''),
-            'tenantName':          entry.get('tenantName', ''),
-            'salonName':           entry.get('salonName', ''),
-            'xeroContactId':       entry.get('xeroContactId') or '',
-            'xeroContactName':     entry.get('xeroContactName') or '',
-            'xeroContactCurrency': entry.get('xeroContactCurrency') or '',
-        })
-    return Response(
-        si.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=salon_mapping.csv'},
-    )
-
-
-@app.route('/api/mapping/import', methods=['POST'])
-@require_auth
-def import_mapping_csv():
-    f = request.files.get('file')
-    if not f:
-        return jsonify({'error': 'No file uploaded'}), 400
-    try:
-        stream = io.StringIO(f.stream.read().decode('utf-8-sig'))
-        reader = csv.DictReader(stream)
-        updated = 0
-        for row in reader:
-            salon_id = row.get('salonId', '').strip()
-            if not salon_id:
-                continue
-            if salon_id not in _salon_mapping:
-                _salon_mapping[salon_id] = {
-                    'accountCode':         row.get('accountCode', ''),
-                    'tenantName':          row.get('tenantName', ''),
-                    'salonName':           row.get('salonName', ''),
-                    'xeroContactId':       row.get('xeroContactId') or None,
-                    'xeroContactName':     row.get('xeroContactName') or None,
-                    'xeroContactCurrency': row.get('xeroContactCurrency') or None,
-                }
-            else:
-                entry = _salon_mapping[salon_id]
-                if row.get('xeroContactId'):
-                    entry['xeroContactId']       = row['xeroContactId']
-                    entry['xeroContactName']     = row.get('xeroContactName') or None
-                    entry['xeroContactCurrency'] = row.get('xeroContactCurrency') or None
-                if row.get('tenantName') and not entry.get('tenantName'):
-                    entry['tenantName'] = row['tenantName']
-                if row.get('salonName') and not entry.get('salonName'):
-                    entry['salonName'] = row['salonName']
-            updated += 1
-        _save_mapping_file()
-        push_failures = []
-        for salonid, entry in _salon_mapping.items():
-            xero_id = entry.get('xeroContactId')
-            if xero_id:
-                err = _push_smartdebit_id(salonid, xero_id)
-                if err:
-                    push_failures.append({
-                        "salonName": entry.get('salonName') or salonid,
-                        "error": err,
-                    })
-        return jsonify({'success': True, 'updated': updated, 'total': len(_salon_mapping),
-                        'pushFailures': push_failures})
-    except Exception as e:
-        app.logger.exception('Mapping import failed')
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/auth/xero')
