@@ -217,7 +217,7 @@ def month_date_range(month, year):
 
 
 def _push_smartdebit_id(salonid, xero_contact_id):
-    """Write the Xero contact ID back to SalonIQ as smartdebitId for the given salon."""
+    """Write the Xero contact ID back to SalonIQ. Returns None on success, error string on failure."""
     try:
         r = requests.get(
             SALONIQ_SMARTDEBIT_URL,
@@ -230,8 +230,11 @@ def _push_smartdebit_id(salonid, xero_contact_id):
         )
         r.raise_for_status()
         app.logger.info("Pushed smartdebitId salon=%s → %s", salonid, xero_contact_id)
+        return None
     except Exception as e:
-        app.logger.warning("Could not push smartdebitId salon=%s: %s", salonid, e)
+        msg = str(e)
+        app.logger.warning("Could not push smartdebitId salon=%s: %s", salonid, msg)
+        return msg
 
 
 # ── Xero helpers ─────────────────────────────────────────────────────────────
@@ -618,12 +621,19 @@ def save_mapping():
     _salon_mapping.clear()
     _salon_mapping.update(data)
     _save_mapping_file()
+    push_failures = []
     for salonid, entry in _salon_mapping.items():
         xero_id = entry.get('xeroContactId')
         if xero_id:
-            _push_smartdebit_id(salonid, xero_id)
+            err = _push_smartdebit_id(salonid, xero_id)
+            if err:
+                push_failures.append({
+                    "salonName": entry.get('salonName') or salonid,
+                    "error": err,
+                })
     mapped = sum(1 for v in _salon_mapping.values() if v.get('xeroContactId'))
-    return jsonify({"success": True, "total": len(_salon_mapping), "mapped": mapped})
+    return jsonify({"success": True, "total": len(_salon_mapping), "mapped": mapped,
+                    "pushFailures": push_failures})
 
 
 @app.route('/api/mapping/clear', methods=['POST'])
@@ -696,11 +706,18 @@ def import_mapping_csv():
                     entry['salonName'] = row['salonName']
             updated += 1
         _save_mapping_file()
+        push_failures = []
         for salonid, entry in _salon_mapping.items():
             xero_id = entry.get('xeroContactId')
             if xero_id:
-                _push_smartdebit_id(salonid, xero_id)
-        return jsonify({'success': True, 'updated': updated, 'total': len(_salon_mapping)})
+                err = _push_smartdebit_id(salonid, xero_id)
+                if err:
+                    push_failures.append({
+                        "salonName": entry.get('salonName') or salonid,
+                        "error": err,
+                    })
+        return jsonify({'success': True, 'updated': updated, 'total': len(_salon_mapping),
+                        'pushFailures': push_failures})
     except Exception as e:
         app.logger.exception('Mapping import failed')
         return jsonify({'error': str(e)}), 500

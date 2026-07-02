@@ -673,6 +673,14 @@ async function saveMapping() {
     const data = await apiFetch('/api/mapping', 'POST', savedMapping);
     showToast(`Mapping saved — ${data.mapped} of ${data.total} salons linked`, 'success');
     updateMappingBadge();
+    if (data.pushFailures && data.pushFailures.length > 0) {
+      const names = data.pushFailures.map(f => f.salonName).join(', ');
+      const firstErr = data.pushFailures[0].error;
+      showToast(
+        `Warning: failed to update ${data.pushFailures.length} salon(s) in SalonIQ (${names}). Error: ${firstErr}`,
+        'error'
+      );
+    }
   } catch(e) { showToast('Save failed: ' + e.message, 'error'); }
 }
 
