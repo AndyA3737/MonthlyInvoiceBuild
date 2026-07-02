@@ -518,7 +518,23 @@ function registerSalonsFromData(rows) {
       savedMapping[key].xeroContactId = smartDebitId;
     }
   });
+  resolveContactNames();
   renderMappingTable();
+}
+
+function resolveContactNames() {
+  if (!xeroContacts.length) return;
+  const byId = {};
+  xeroContacts.forEach(c => { byId[c.id] = c; });
+  Object.values(savedMapping).forEach(entry => {
+    if (entry.xeroContactId && !entry.xeroContactName) {
+      const c = byId[entry.xeroContactId];
+      if (c) {
+        entry.xeroContactName     = c.name;
+        entry.xeroContactCurrency = c.currency || '';
+      }
+    }
+  });
 }
 
 async function loadXeroContacts() {
@@ -530,11 +546,11 @@ async function loadXeroContacts() {
     const data = await apiFetch('/api/xero/contacts');
     xeroContacts = data.contacts || [];
     contactsLoaded = true;
-    _contactOptsCache = null;  // invalidate cache so selects get fresh options
+    _contactOptsCache = null;
+    resolveContactNames();
   } catch(e) {
     showToast('Could not load Xero contacts: ' + e.message, 'error');
   } finally {
-    // Always re-render so salons show even if Xero contacts failed
     document.getElementById('mappingLoading').style.display = 'none';
     document.getElementById('loadContactsBtn').disabled = false;
     renderMappingTable();
