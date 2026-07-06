@@ -284,7 +284,7 @@ _MONTH_NAMES = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
 
 
-def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
+def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0, contact_currency=None):
     """Map a SalonIQ invoice row to a Xero invoice dict using the source config."""
     if source_cfg is None:
         source_cfg = INVOICE_SOURCES['stripe']
@@ -313,8 +313,8 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0):
     else:
         inv_date = _parse_date(row.get('InvoiceDate') or row.get('INVOICEDATE') or '')
 
-    currency = 'GBP'
-    is_gbp   = True
+    currency = ((contact_currency or {}).get(smart_id) or 'GBP').strip().upper() or 'GBP'
+    is_gbp   = currency == 'GBP'
 
     # Main bill — use configured amount field, apply VAT based on source and currency
     try:
@@ -468,39 +468,39 @@ def api_invoices():
         return jsonify({"error": str(e)}), 500
 
 
+def _fetch_xero_contacts():
+    """Fetch all active Xero contacts (id, name, currency). Raises on error."""
+    all_contacts, page = [], 1
+    while True:
+        r = requests.get(
+            f"{XERO_API_BASE}/Contacts",
+            headers=_xero_headers(),
+            params={"page": page, "includeArchived": "false"},
+        )
+        r.raise_for_status()
+        payload = r.json()
+        batch = payload.get("Contacts", [])
+        all_contacts.extend(
+            {
+                "id":       c["ContactID"],
+                "name":     c["Name"],
+                "currency": c.get("DefaultCurrency", ""),
+            }
+            for c in batch if c.get("ContactStatus") == "ACTIVE"
+        )
+        if len(batch) < 100:
+            break
+        page += 1
+    return all_contacts
+
+
 @app.route('/api/xero/contacts')
 @require_auth
 def xero_contacts():
     if not _xero_tokens.get('access_token'):
         return jsonify({"error": "Not connected to Xero — please click Connect Xero"}), 403
     try:
-        all_contacts, page = [], 1
-        while True:
-            r = requests.get(
-                f"{XERO_API_BASE}/Contacts",
-                headers=_xero_headers(),
-                params={"page": page, "includeArchived": "false"},
-            )
-            if not r.ok:
-                return jsonify({"error": f"Xero {r.status_code}: {r.text[:400]}"}), 500
-            if not r.text.strip():
-                return jsonify({"error": f"Xero returned empty body (status {r.status_code})"}), 500
-            try:
-                payload = r.json()
-            except ValueError:
-                return jsonify({"error": f"Xero non-JSON (status {r.status_code}): {r.text[:400]}"}), 500
-            batch = payload.get("Contacts", [])
-            all_contacts.extend(
-                {
-                    "id":       c["ContactID"],
-                    "name":     c["Name"],
-                    "currency": c.get("DefaultCurrency", ""),
-                }
-                for c in batch if c.get("ContactStatus") == "ACTIVE"
-            )
-            if len(batch) < 100:
-                break
-            page += 1
+        all_contacts = _fetch_xero_contacts()
         all_contacts.sort(key=lambda c: c["name"].lower())
         return jsonify({"contacts": all_contacts})
     except Exception as e:
@@ -641,7 +641,12 @@ def xero_export():
         return jsonify({"error": "No invoices provided"}), 400
 
     try:
-        xero_invs = [map_to_xero_invoice(row, source_cfg, invoice_month=invoice_month, invoice_year=invoice_year) for row in invoices]
+        contact_currency = {c['id']: c['currency'] for c in _fetch_xero_contacts() if c.get('currency')}
+        xero_invs = [
+            map_to_xero_invoice(row, source_cfg, invoice_month=invoice_month, invoice_year=invoice_year,
+                                 contact_currency=contact_currency)
+            for row in invoices
+        ]
         created_total = 0
         errors = []
         BATCH_SIZE = 50
