@@ -680,6 +680,7 @@ def xero_export():
                     errors.append(r.text[:300])
 
         if errors:
+            app.logger.warning("Xero export partial failure: created=%d errors=%s", created_total, errors)
             return jsonify({
                 "success": False,
                 "created": created_total,
