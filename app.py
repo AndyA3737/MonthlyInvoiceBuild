@@ -353,7 +353,7 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0, c
         if sms_amount > 0:
             prev_month = _MONTH_NAMES[(invoice_month - 2) % 12] if invoice_month else ''
             sms_desc = f"SMS Messages (Sent in {prev_month})" if prev_month else "SMS Messages"
-            line_items.append({"Quantity": sms_qty, "UnitAmount": round(sms_price, 6), "ItemCode": item_sms, "Description": sms_desc, **tax_override})
+            line_items.append({"Quantity": sms_qty, "UnitAmount": round(sms_price, 6), "LineAmount": sms_amount, "ItemCode": item_sms, "Description": sms_desc, **tax_override})
 
     item_salonspy = source_cfg.get('item_salonspy')
     if item_salonspy:
@@ -373,7 +373,7 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0, c
         except (ValueError, TypeError):
             pc_qty, pc_price, pc_amount = 0.0, 0.0, 0.0
         if pc_amount > 0:
-            line_items.append({"Quantity": pc_qty, "UnitAmount": round(pc_price, 6), "ItemCode": item_postcode, **tax_override})
+            line_items.append({"Quantity": pc_qty, "UnitAmount": round(pc_price, 6), "LineAmount": pc_amount, "ItemCode": item_postcode, **tax_override})
 
     item_hardware = source_cfg.get('item_hardware')
     if item_hardware:
@@ -411,7 +411,7 @@ def map_to_xero_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0, c
             if tws_amount > 0:
                 prev_month = _MONTH_NAMES[(invoice_month - 2) % 12] if invoice_month else ''
                 tws_desc = f"Incoming Messages in {prev_month} ({int(tws_qty)})" if prev_month else f"Incoming Messages ({int(tws_qty)})"
-                line_items.append({"Quantity": tws_qty, "UnitAmount": round(tws_price, 6), "ItemCode": item_twowaysms, "Description": tws_desc, **tax_override})
+                line_items.append({"Quantity": tws_qty, "UnitAmount": round(tws_price, 6), "LineAmount": tws_amount, "ItemCode": item_twowaysms, "Description": tws_desc, **tax_override})
 
     xero_inv = {
         "Type":    "ACCREC",
