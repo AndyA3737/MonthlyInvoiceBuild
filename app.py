@@ -152,7 +152,7 @@ LIVE_SERVER = {
     "date_fmt": "%d/%m/%Y",
 }
 
-SALONIQ_SMARTDEBIT_URL   = "https://loki.saloniq.co.uk/api/UpdateSalonSmartDebitId"
+SALONIQ_SMARTDEBIT_URL   = "https://apihub.saloniq.co.uk/api/UpdateSalonSmartDebitId"
 SALONIQ_SMARTDEBIT_TOKEN = "SDIA1B2C3"
 
 API_COMMON = dict(Salonid="", UserID="", data1="", data2="", data3="", data4="")
