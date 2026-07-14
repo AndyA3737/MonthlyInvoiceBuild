@@ -136,6 +136,7 @@ INVOICE_SOURCES = {
         "label":              "Subscription Invoices",
         "report":             "XXX_Export_Admin_TUBR_SubscriptionInvoices",
         "item_code":          "Monthly",
+        "item_description":   "One Month's Salon-iQ Subscription",
         "amount_field":       "MonthlyAmount",
         "item_terminal":      None,
         "vat_inclusive":      False,
@@ -290,6 +291,26 @@ def _fetch_qb_customer_currencies():
     return out
 
 
+def _fetch_qb_exchange_rate(currency, as_of_date=None):
+    """Look up QuickBooks' own exchange rate for `currency` -> home currency.
+
+    Without an explicit ExchangeRate on the invoice, QBO silently defaults to 1.0
+    (i.e. treats foreign currency as 1:1 with home currency) instead of the real
+    market rate. Returns None if QBO has no rate for that currency/date.
+    """
+    params = {"sourcecurrencycode": currency, "minorversion": QB_MINOR_VERSION}
+    if as_of_date:
+        params["asofdate"] = as_of_date
+    try:
+        r = requests.get(_qb_realm_url("exchangerate"), headers=_qb_headers(), params=params)
+        r.raise_for_status()
+        return (r.json().get("ExchangeRate") or {}).get("Rate")
+    except requests.HTTPError as e:
+        app.logger.warning("Could not fetch QuickBooks exchange rate for %s: %s",
+                            currency, e.response.text[:500] if e.response is not None else e)
+        return None
+
+
 def _parse_date(val):
     """Convert various date strings to YYYY-MM-DD for QuickBooks."""
     if not val:
@@ -324,7 +345,8 @@ _MONTH_NAMES = ['January','February','March','April','May','June',
 
 
 def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0,
-                               contact_currency=None, item_ids=None, tax_code_ids=None):
+                               contact_currency=None, item_ids=None, tax_code_ids=None,
+                               exchange_rates=None):
     """Map a SalonIQ invoice row to a QuickBooks Online Invoice dict using the source config.
 
     Raises ValueError (with a user-facing message) if the row can't be mapped —
@@ -407,7 +429,7 @@ def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_yea
             line["Description"] = description
         return line
 
-    line_items = [qb_line(item_code, amount)]
+    line_items = [qb_line(item_code, amount, source_cfg.get('item_description'))]
     if item_terminal and terminal_amount > 0:
         line_items.append(qb_line(item_terminal, terminal_amount))
 
@@ -491,6 +513,11 @@ def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_yea
     }
     if not is_gbp:
         qb_inv["CurrencyRef"] = {"value": currency}
+        rate = (exchange_rates or {}).get(currency)
+        if not rate:
+            raise ValueError(f"No QuickBooks exchange rate available for {currency} — "
+                              f"invoice would silently post at a 1:1 rate.")
+        qb_inv["ExchangeRate"] = rate
     if inv_date:
         qb_inv["TxnDate"] = inv_date
         qb_inv["DueDate"] = inv_date
@@ -691,6 +718,19 @@ def quickbooks_export():
         contact_currency = _fetch_qb_customer_currencies()
         tax_code_ids     = _fetch_qb_tax_codes()
 
+        # Same date rule map_to_quickbooks_invoice uses — deterministic for both
+        # configured sources, so one exchange-rate lookup per currency covers the batch.
+        date_rule = source_cfg.get('invoice_date', '')
+        as_of_date = None
+        if invoice_month and invoice_year and date_rule == 'first':
+            as_of_date = date(invoice_year, invoice_month, 1).strftime('%Y-%m-%d')
+        elif invoice_month and invoice_year and date_rule == 'last':
+            _, last_day = monthrange(invoice_year, invoice_month)
+            as_of_date = date(invoice_year, invoice_month, last_day).strftime('%Y-%m-%d')
+
+        currencies_used = {c for c in contact_currency.values() if c and c.upper() != 'GBP'}
+        exchange_rates = {c: _fetch_qb_exchange_rate(c, as_of_date) for c in currencies_used}
+
         qb_invs = []
         errors  = []
         for row in invoices:
@@ -699,6 +739,7 @@ def quickbooks_export():
                 qb_invs.append(map_to_quickbooks_invoice(
                     row, source_cfg, invoice_month=invoice_month, invoice_year=invoice_year,
                     contact_currency=contact_currency, item_ids=item_ids, tax_code_ids=tax_code_ids,
+                    exchange_rates=exchange_rates,
                 ))
             except ValueError as e:
                 errors.append(f"{ref}: {e}")
