@@ -62,15 +62,6 @@
   .badge-expired      { background: #FEF9C3; color: #854D0E; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
-  .nav-tab {
-    padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
-    border: none; background: transparent; color: var(--muted);
-    border-bottom: 3px solid transparent; transition: all 0.15s; white-space: nowrap;
-    font-family: inherit;
-  }
-  .nav-tab:hover  { color: var(--navy); }
-  .nav-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
-
   .toast {
     position: fixed; bottom: 24px; right: 24px; z-index: 999;
     padding: 13px 20px; border-radius: 10px; font-size: 14px; font-weight: 500;
@@ -83,12 +74,6 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto 16px; }
-
-  .status-mapped   { color: #007A6D; font-weight: 600; font-size: 16px; }
-  .status-unmapped { color: #F59E0B; font-weight: 600; font-size: 16px; }
-
-  /* Mapping contact select */
-  .contact-select { width: 100%; min-width: 220px; max-width: 360px; padding: 6px 10px; font-size: 13px; }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: #F2F5F8; }
@@ -110,9 +95,9 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
-    <span class="badge badge-disconnected" id="xeroBadge"><span class="dot"></span><span id="xeroBadgeText">Xero: Not Connected</span></span>
-    <button class="btn btn-teal"   id="xeroConnectBtn"    onclick="connectXero()"    style="padding:7px 14px;font-size:13px;">Connect Xero</button>
-    <button class="btn btn-danger" id="xeroDisconnectBtn" onclick="disconnectXero()" style="padding:7px 14px;font-size:13px;display:none;">Disconnect</button>
+    <span class="badge badge-disconnected" id="qbBadge"><span class="dot"></span><span id="qbBadgeText">QuickBooks: Not Connected</span></span>
+    <button class="btn btn-teal"   id="qbConnectBtn"    onclick="connectQuickBooks()"    style="padding:7px 14px;font-size:13px;">Connect QuickBooks</button>
+    <button class="btn btn-danger" id="qbDisconnectBtn" onclick="disconnectQuickBooks()" style="padding:7px 14px;font-size:13px;display:none;">Disconnect</button>
   </div>
 </header>
 
@@ -146,21 +131,15 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
         Load Invoices
       </button>
-      <button class="btn btn-navy" id="exportBtn" onclick="exportToXero()" disabled style="margin-left:auto;">
+      <button class="btn btn-navy" id="exportBtn" onclick="exportToQuickBooks()" disabled style="margin-left:auto;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Export to Xero
+        Export to QuickBooks
       </button>
     </div>
   </div>
 
-  <!-- Tab bar -->
-  <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:0;background:var(--card);border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;padding:0 8px;">
-    <button class="nav-tab active" id="tab-invoices"  onclick="switchTab('invoices')">Invoices</button>
-    <button class="nav-tab"        id="tab-mapping"   onclick="switchTab('mapping')">Contact Mapping <span id="mappingBadge" style="font-size:11px;background:#F1F5F9;color:var(--muted);padding:2px 7px;border-radius:10px;margin-left:4px;font-weight:500;"></span></button>
-  </div>
-
-  <!-- ── Tab 1: Invoices ──────────────────────────────────────────────────── -->
-  <div id="pane-invoices" style="background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;">
+  <!-- ── Invoices ─────────────────────────────────────────────────────────── -->
+  <div id="pane-invoices" style="background:var(--card);border:1px solid var(--border);border-radius:12px;">
 
     <!-- Loading -->
     <div id="loadingState" style="display:none;text-align:center;padding:72px 32px;">
@@ -192,66 +171,6 @@
     </div>
   </div>
 
-  <!-- ── Tab 2: Contact Mapping ───────────────────────────────────────────── -->
-  <div id="pane-mapping" style="display:none;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;">
-
-    <!-- Header bar -->
-    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <div>
-        <div style="font-size:15px;font-weight:700;color:var(--navy);">Salon → Xero Contact Mapping</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:2px;">Link each SalonIQ salon to an existing Xero contact. Saved automatically per salon code.</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span id="mappingCounter" style="font-size:13px;color:var(--muted);"></span>
-        <button class="btn btn-outline btn-sm" id="unmappedFilterBtn" onclick="toggleUnmappedFilter()">Show Unmapped</button>
-        <button class="btn btn-outline btn-sm" id="loadContactsBtn" onclick="loadXeroContacts()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
-          Reload Xero Contacts
-        </button>
-        <button class="btn btn-teal btn-sm" onclick="saveMapping()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Save Mapping
-        </button>
-      </div>
-    </div>
-
-    <!-- Search -->
-    <div style="padding:12px 24px;border-bottom:1px solid var(--border);">
-      <input type="text" id="mappingSearch" placeholder="Search salons..." oninput="filterMappingTable()" style="width:280px;">
-    </div>
-
-    <!-- Mapping loading spinner -->
-    <div id="mappingLoading" style="display:none;text-align:center;padding:48px;">
-      <div class="spinner"></div>
-      <div style="color:var(--muted);font-size:14px;">Loading Xero contacts...</div>
-    </div>
-
-    <!-- Mapping empty -->
-    <div id="mappingEmpty" style="text-align:center;padding:64px;color:var(--muted);">
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 auto 14px;display:block;opacity:0.35;">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
-      </svg>
-      <div style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:8px;">No salons to map yet</div>
-      <div style="font-size:13px;">Load invoices first — salons will appear here automatically.</div>
-    </div>
-
-    <!-- Mapping table -->
-    <div id="mappingTableWrap" style="display:none;overflow-x:auto;max-height:560px;overflow-y:auto;">
-      <table id="mappingTable">
-        <thead>
-          <tr>
-            <th style="width:110px;">Account Code</th>
-            <th>Tenant Name</th>
-            <th>Salon Name</th>
-            <th style="min-width:280px;">Xero Contact</th>
-            <th style="width:80px;text-align:center;">Status</th>
-          </tr>
-        </thead>
-        <tbody id="mappingBody"></tbody>
-      </table>
-    </div>
-  </div>
-
 </main>
 
 <div id="toast" class="toast" style="display:none;"></div>
@@ -259,11 +178,7 @@
 <script>
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-let currentData   = [];
-let xeroContacts  = [];   // [{id, name}] from Xero
-let savedMapping   = {};   // ACCOUNTCODE -> {salonName, xeroContactId, xeroContactName}
-let contactsLoaded  = false;
-let contactsLoading = false;
+let currentData = [];
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
@@ -282,7 +197,7 @@ function initSelectors() {
 async function boot() {
   initSelectors();
   await loadSources();
-  await checkXeroStatus();
+  await checkQuickBooksStatus();
 }
 
 async function loadSources() {
@@ -297,60 +212,47 @@ async function loadSources() {
   } catch(e) { console.error('Could not load sources', e); }
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
+// ── QuickBooks status ────────────────────────────────────────────────────────
 
-function switchTab(tab) {
-  ['invoices', 'mapping'].forEach(t => {
-    document.getElementById(`pane-${t}`).style.display = t === tab ? '' : 'none';
-    document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
-  });
-  if (tab === 'mapping') {
-    renderMappingTable();
-    if (!contactsLoaded && !contactsLoading) loadXeroContacts();
-  }
-}
-
-// ── Xero status ───────────────────────────────────────────────────────────────
-
-async function checkXeroStatus() {
+async function checkQuickBooksStatus() {
   try {
-    const data = await apiFetch('/api/xero/status');
-    updateXeroUI(data);
+    const data = await apiFetch('/api/quickbooks/status');
+    updateQuickBooksUI(data);
     const params = new URLSearchParams(window.location.search);
-    if (params.get('xero') === 'connected') {
-      showToast('Successfully connected to Xero: ' + (data.tenant || ''), 'success');
+    if (params.get('quickbooks') === 'connected') {
+      showToast('Successfully connected to QuickBooks: ' + (data.company || ''), 'success');
       window.history.replaceState({}, '', '/');
     }
-    const err = params.get('xero_error');
-    if (err) { showToast('Xero connection failed: ' + decodeURIComponent(err), 'error'); window.history.replaceState({}, '', '/'); }
+    const err = params.get('quickbooks_error');
+    if (err) { showToast('QuickBooks connection failed: ' + decodeURIComponent(err), 'error'); window.history.replaceState({}, '', '/'); }
   } catch(e) { console.error(e); }
 }
 
-function updateXeroUI(status) {
-  const badge = document.getElementById('xeroBadge');
-  const text  = document.getElementById('xeroBadgeText');
-  const conn  = document.getElementById('xeroConnectBtn');
-  const disc  = document.getElementById('xeroDisconnectBtn');
+function updateQuickBooksUI(status) {
+  const badge = document.getElementById('qbBadge');
+  const text  = document.getElementById('qbBadgeText');
+  const conn  = document.getElementById('qbConnectBtn');
+  const disc  = document.getElementById('qbDisconnectBtn');
   if (status.connected && !status.expired) {
-    badge.className = 'badge badge-connected'; text.textContent = 'Xero: ' + status.tenant;
+    badge.className = 'badge badge-connected'; text.textContent = 'QuickBooks: ' + status.company;
     conn.style.display = 'none'; disc.style.display = '';
   } else if (status.connected && status.expired) {
-    badge.className = 'badge badge-expired'; text.textContent = 'Xero: Token Expired';
+    badge.className = 'badge badge-expired'; text.textContent = 'QuickBooks: Token Expired';
     conn.style.display = ''; disc.style.display = '';
   } else {
-    badge.className = 'badge badge-disconnected'; text.textContent = 'Xero: Not Connected';
+    badge.className = 'badge badge-disconnected'; text.textContent = 'QuickBooks: Not Connected';
     conn.style.display = ''; disc.style.display = 'none';
   }
   document.getElementById('exportBtn').disabled =
     !(status.connected && !status.expired && currentData.length > 0);
 }
 
-function connectXero()    { window.location.href = '/auth/xero'; }
-async function disconnectXero() {
-  if (!confirm('Disconnect from Xero?')) return;
-  await apiFetch('/api/xero/disconnect', 'POST');
-  updateXeroUI({ connected: false });
-  showToast('Disconnected from Xero', 'info');
+function connectQuickBooks()    { window.location.href = '/auth/quickbooks'; }
+async function disconnectQuickBooks() {
+  if (!confirm('Disconnect from QuickBooks?')) return;
+  await apiFetch('/api/quickbooks/disconnect', 'POST');
+  updateQuickBooksUI({ connected: false });
+  showToast('Disconnected from QuickBooks', 'info');
 }
 
 // ── Load invoices ─────────────────────────────────────────────────────────────
@@ -366,10 +268,7 @@ async function loadInvoices() {
     const data = await apiFetch(`/api/invoices?month=${month}&year=${year}&source=${source}`);
     currentData = data.data || [];
     renderGrid(currentData, +month, +year);
-    await checkXeroStatus();
-    registerSalonsFromData(currentData);
-    updateMappingBadge();
-    if (!contactsLoaded && !contactsLoading) loadXeroContacts();
+    await checkQuickBooksStatus();
     if (!currentData.length) { showEmpty(); showToast('No invoices found for this period', 'info'); }
     else showToast(`Loaded ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''}`, 'success');
   } catch(e) { showEmpty(); showToast('Error: ' + e.message, 'error'); }
@@ -471,11 +370,11 @@ function renderGrid(rows, month, year) {
   hideLoading();
 }
 
-// ── Export to Xero ────────────────────────────────────────────────────────────
+// ── Export to QuickBooks ─────────────────────────────────────────────────────
 
-async function exportToXero() {
+async function exportToQuickBooks() {
   if (!currentData.length) { showToast('No invoices to export', 'error'); return; }
-  if (!confirm(`Export ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''} to Xero as DRAFT?`)) return;
+  if (!confirm(`Export ${currentData.length} invoice${currentData.length !== 1 ? 's' : ''} to QuickBooks?`)) return;
   const btn = document.getElementById('exportBtn'), orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;"></span> Exporting…';
@@ -483,222 +382,12 @@ async function exportToXero() {
     const source = document.getElementById('sourceSelect').value || 'stripe';
     const month  = +document.getElementById('monthSelect').value;
     const year   = +document.getElementById('yearSelect').value;
-    const data = await apiFetch('/api/xero/export', 'POST', { invoices: currentData, source, month, year });
-    if (data.success) showToast(`Exported ${data.created} invoice${data.created !== 1 ? 's' : ''} to Xero as DRAFT`, 'success');
+    const data = await apiFetch('/api/quickbooks/export', 'POST', { invoices: currentData, source, month, year });
+    if (data.success) showToast(`Exported ${data.created} invoice${data.created !== 1 ? 's' : ''} to QuickBooks`, 'success');
     else if (data.created !== undefined) showToast(`Partial: ${data.created} created. Errors: ${(data.errors||[]).join(' | ')}`, 'error');
     else throw new Error(data.error || 'Export failed');
   } catch(e) { showToast('Export failed: ' + e.message, 'error'); }
-  finally { btn.disabled = false; btn.innerHTML = orig; checkXeroStatus(); }
-}
-
-// ── Contact Mapping ───────────────────────────────────────────────────────────
-
-function registerSalonsFromData(rows) {
-  if (!rows || !rows.length) return;
-  rows.forEach(r => {
-    const salonId     = r.salonid || r.SalonId || '';
-    const accountCode = r.AccountCode || r.ACCOUNTCODE || '';
-    const key = salonId || accountCode;
-    if (!key) return;
-    const smartDebitId = r.smartdebitId || r.SmartDebitId || '';
-    const tenantKey = Object.keys(r).find(x => x.toLowerCase() === 'tenantname');
-    if (!savedMapping[key]) {
-      savedMapping[key] = {
-        salonId:             key,
-        accountCode:         accountCode,
-        tenantName:          tenantKey ? r[tenantKey] : '',
-        salonName:           r.SalonName || r.SALONNAME || r.Name || r.Tenantname || r.TENANTNAME || key,
-        xeroContactId:       smartDebitId || null,
-        xeroContactName:     null,
-        xeroContactCurrency: null,
-      };
-    } else if (smartDebitId && !savedMapping[key].xeroContactId) {
-      savedMapping[key].xeroContactId = smartDebitId;
-    }
-  });
-  resolveContactNames();
-  renderMappingTable();
-}
-
-function resolveContactNames() {
-  if (!xeroContacts.length) return;
-  const byId = {};
-  xeroContacts.forEach(c => { byId[c.id] = c; });
-  Object.values(savedMapping).forEach(entry => {
-    if (entry.xeroContactId) {
-      const c = byId[entry.xeroContactId];
-      if (c) {
-        entry.xeroContactName     = c.name;
-        entry.xeroContactCurrency = c.currency || '';
-      }
-    }
-  });
-}
-
-async function loadXeroContacts() {
-  if (contactsLoading) return;
-  contactsLoading = true;
-  document.getElementById('mappingLoading').style.display = '';
-  document.getElementById('mappingTableWrap').style.display = 'none';
-  document.getElementById('mappingEmpty').style.display = 'none';
-  document.getElementById('loadContactsBtn').disabled = true;
-  try {
-    const data = await apiFetch('/api/xero/contacts');
-    xeroContacts = data.contacts || [];
-    contactsLoaded = true;
-    _contactOptsCache = null;
-    resolveContactNames();
-  } catch(e) {
-    showToast('Could not load Xero contacts: ' + e.message, 'error');
-  } finally {
-    contactsLoading = false;
-    document.getElementById('mappingLoading').style.display = 'none';
-    document.getElementById('loadContactsBtn').disabled = false;
-    renderMappingTable();
-  }
-}
-
-function buildContactOptions() {
-  let opts = '<option value="">— Not Mapped —</option>';
-  xeroContacts.forEach(c => {
-    opts += `<option value="${esc(c.id)}" data-name="${esc(c.name)}" data-currency="${esc(c.currency || '')}">${esc(c.name)}</option>`;
-  });
-  return opts;
-}
-
-function renderMappingTable() {
-  const keys = Object.keys(savedMapping);
-  if (!keys.length) {
-    document.getElementById('mappingEmpty').style.display = '';
-    document.getElementById('mappingTableWrap').style.display = 'none';
-    return;
-  }
-  document.getElementById('mappingEmpty').style.display    = 'none';
-  document.getElementById('mappingTableWrap').style.display = '';
-
-  const tbody = document.getElementById('mappingBody');
-  tbody.innerHTML = '';
-  const frag = document.createDocumentFragment();
-
-  keys.sort((a, b) => {
-    const ac = (savedMapping[a].accountCode || a).toLowerCase();
-    const bc = (savedMapping[b].accountCode || b).toLowerCase();
-    return ac < bc ? -1 : ac > bc ? 1 : 0;
-  }).forEach(salonId => {
-    const entry       = savedMapping[salonId];
-    const mapped      = !!entry.xeroContactId;
-    const displayCode = entry.accountCode || salonId;
-
-    const tr = document.createElement('tr');
-    tr.dataset.code = salonId;
-    tr.dataset.name = ((entry.accountCode || '') + ' ' + (entry.salonName || '')).toLowerCase();
-
-    // Build select with ONLY the current selection — full options load lazily on focus
-    const currentOpt = entry.xeroContactId
-      ? `<option value="${esc(entry.xeroContactId)}">${esc(entry.xeroContactName || entry.xeroContactId)}</option>`
-      : `<option value="">— Not Mapped —</option>`;
-
-    tr.innerHTML = `
-      <td style="font-weight:600;color:var(--navy);font-size:13px;">${esc(displayCode)}</td>
-      <td style="font-size:13px;color:var(--muted);">${esc(entry.tenantName || '')}</td>
-      <td style="font-size:13px;">${esc(entry.salonName || '')}</td>
-      <td>
-        <select class="contact-select" data-code="${esc(salonId)}"
-                onchange="onMappingChange(this)" onfocus="expandContactOptions(this)">
-          ${currentOpt}
-        </select>
-      </td>
-      <td style="text-align:center;" class="status-cell">
-        <span class="${mapped ? 'status-mapped' : 'status-unmapped'}">${mapped ? '✓' : '⚠'}</span>
-      </td>`;
-
-    frag.appendChild(tr);
-  });
-
-  tbody.appendChild(frag);
-  updateMappingCounter();
-}
-
-// Load all Xero contacts into a select the first time the user clicks it
-let _contactOptsCache = null;
-function expandContactOptions(sel) {
-  if (sel.dataset.expanded) return;
-  sel.dataset.expanded = '1';
-  if (!_contactOptsCache) {
-    _contactOptsCache = buildContactOptions();
-  }
-  const currentVal = sel.value;
-  sel.innerHTML = _contactOptsCache;
-  sel.value = currentVal;
-  if (!sel.value) sel.value = '';
-}
-
-function onMappingChange(sel) {
-  const code = sel.dataset.code;
-  const opt  = sel.options[sel.selectedIndex];
-  savedMapping[code] = {
-    ...savedMapping[code],
-    xeroContactId:       sel.value || null,
-    xeroContactName:     sel.value ? opt.textContent : null,
-    xeroContactCurrency: sel.value ? (opt.dataset.currency || '') : null,
-  };
-  const cell = sel.closest('tr').querySelector('.status-cell');
-  cell.innerHTML = sel.value
-    ? '<span class="status-mapped">✓</span>'
-    : '<span class="status-unmapped">⚠</span>';
-  updateMappingCounter();
-}
-
-async function saveMapping() {
-  try {
-    const data = await apiFetch('/api/mapping', 'POST', savedMapping);
-    showToast(`Mapping saved — ${data.mapped} of ${data.total} salons linked`, 'success');
-    updateMappingBadge();
-    if (data.pushFailures && data.pushFailures.length > 0) {
-      const names = data.pushFailures.map(f => f.salonName).join(', ');
-      const firstErr = data.pushFailures[0].error;
-      showToast(
-        `Warning: failed to update ${data.pushFailures.length} salon(s) in SalonIQ (${names}). Error: ${firstErr}`,
-        'error'
-      );
-    }
-  } catch(e) { showToast('Save failed: ' + e.message, 'error'); }
-}
-
-let _unmappedOnly = false;
-function toggleUnmappedFilter() {
-  _unmappedOnly = !_unmappedOnly;
-  const btn = document.getElementById('unmappedFilterBtn');
-  btn.textContent = _unmappedOnly ? 'Show All' : 'Show Unmapped';
-  btn.className   = _unmappedOnly ? 'btn btn-teal btn-sm' : 'btn btn-outline btn-sm';
-  filterMappingTable();
-}
-
-function filterMappingTable() {
-  const q = document.getElementById('mappingSearch').value.toLowerCase();
-  document.querySelectorAll('#mappingBody tr').forEach(tr => {
-    const mapped = savedMapping[tr.dataset.code] && savedMapping[tr.dataset.code].xeroContactId;
-    const matchSearch = !q || tr.dataset.name.includes(q) || tr.dataset.code.toLowerCase().includes(q);
-    const matchFilter = !_unmappedOnly || !mapped;
-    tr.style.display = (matchSearch && matchFilter) ? '' : 'none';
-  });
-}
-
-
-function updateMappingCounter() {
-  const total  = Object.keys(savedMapping).length;
-  const mapped = Object.values(savedMapping).filter(v => v.xeroContactId).length;
-  document.getElementById('mappingCounter').textContent = total ? `${mapped} of ${total} mapped` : '';
-}
-
-function updateMappingBadge() {
-  const total  = Object.keys(savedMapping).length;
-  const mapped = Object.values(savedMapping).filter(v => v.xeroContactId).length;
-  const badge  = document.getElementById('mappingBadge');
-  const unmapped = total - mapped;
-  badge.textContent = unmapped > 0 ? `${unmapped} unmapped` : total ? '✓ all mapped' : '';
-  badge.style.background = unmapped > 0 ? '#FEF3C7' : '#D1FAF5';
-  badge.style.color      = unmapped > 0 ? '#92400E'  : '#007A6D';
+  finally { btn.disabled = false; btn.innerHTML = orig; checkQuickBooksStatus(); }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
