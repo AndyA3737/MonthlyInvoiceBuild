@@ -242,6 +242,8 @@ def _qb_query_all(entity, columns):
     while True:
         q = f"SELECT {columns} FROM {entity} STARTPOSITION {start} MAXRESULTS 1000"
         r = requests.get(_qb_realm_url("query"), headers=_qb_headers(), params={"query": q})
+        if not r.ok:
+            app.logger.warning("QuickBooks query failed [%s]: %s | response: %s", r.status_code, q, r.text[:1000])
         r.raise_for_status()
         batch = (r.json().get("QueryResponse") or {}).get(entity, [])
         results.extend(batch)
@@ -604,6 +606,21 @@ def auth_quickbooks_callback():
         return redirect('/?quickbooks_error=' + quote(str(e)))
 
     return redirect('/?quickbooks=connected')
+
+
+@app.route('/api/quickbooks/debug/customer-currencies')
+@require_auth
+def quickbooks_debug_customer_currencies():
+    """Read-only diagnostic: shows the raw customer currency query result/error without touching any invoices."""
+    if not _qb_tokens.get('access_token'):
+        return jsonify({"error": "Not connected to QuickBooks"}), 403
+    try:
+        customers = _qb_query_all("Customer", "Id, CurrencyRef")
+        return jsonify({"count": len(customers), "sample": customers[:5]})
+    except requests.HTTPError as e:
+        return jsonify({"error": str(e), "response_body": e.response.text[:1500] if e.response is not None else None}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/quickbooks/status')
