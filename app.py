@@ -278,7 +278,7 @@ def _fetch_qb_customer_currencies():
     Treat that as "everyone's on the home currency" instead of failing the export.
     """
     try:
-        customers = _qb_query_all("Customer", "Id, CurrencyRef")
+        customers = _qb_query_all("Customer", "*")
     except requests.HTTPError:
         app.logger.info("QuickBooks Customer.CurrencyRef query failed — assuming multi-currency is off")
         return {}
@@ -621,8 +621,10 @@ def quickbooks_debug_customer_currencies():
     if not _qb_tokens.get('access_token'):
         return jsonify({"error": "Not connected to QuickBooks"}), 403
     try:
-        customers = _qb_query_all("Customer", "Id, CurrencyRef")
-        return jsonify({"count": len(customers), "sample": customers[:5]})
+        customers = _qb_query_all("Customer", "*")
+        summary = [{"Id": c.get("Id"), "DisplayName": c.get("DisplayName"), "CurrencyRef": c.get("CurrencyRef")}
+                   for c in customers]
+        return jsonify({"count": len(customers), "sample": summary[:10]})
     except requests.HTTPError as e:
         return jsonify({"error": str(e), "response_body": e.response.text[:1500] if e.response is not None else None}), 500
     except Exception as e:
