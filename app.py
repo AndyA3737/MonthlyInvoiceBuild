@@ -369,7 +369,8 @@ def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_yea
     except (ValueError, TypeError):
         terminal_amount = 0.0
 
-    # AccountCode (e.g. ABS003) used as the QuickBooks invoice DocNumber
+    # AccountCode (e.g. ABS003) — recorded on the invoice for traceability, but not
+    # used as the invoice number so QuickBooks assigns its own sequential numbering
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
     # QBO requires a TaxCodeRef on every line once the company has tax tracking on.
@@ -487,7 +488,9 @@ def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_yea
         qb_inv["TxnDate"] = inv_date
         qb_inv["DueDate"] = inv_date
     if reference:
-        qb_inv["DocNumber"] = reference[:21]  # QuickBooks caps DocNumber at 21 characters
+        # Leave DocNumber unset so QuickBooks assigns its own next sequential invoice
+        # number — the SalonIQ AccountCode goes in PrivateNote (internal-only) instead.
+        qb_inv["PrivateNote"] = f"SalonIQ AccountCode: {reference}"
 
     return qb_inv
 
