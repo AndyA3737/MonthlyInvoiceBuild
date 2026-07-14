@@ -52,6 +52,10 @@ QB_API_BASE = (
     "https://sandbox-quickbooks.api.intuit.com/v3/company"
 )
 
+# Without a minorversion, QBO serves its oldest baseline schema, which is missing
+# fields like Customer.CurrencyRef. Bump this if a future API feature needs a newer one.
+QB_MINOR_VERSION = "75"
+
 # Token persistence — survives restarts when a Railway Volume is mounted at /data
 # Set QB_TOKEN_FILE env var to override (default: /data/qb_tokens.json)
 TOKEN_FILE = os.environ.get('QB_TOKEN_FILE', '/data/qb_tokens.json')
@@ -241,7 +245,8 @@ def _qb_query_all(entity, columns):
     results, start = [], 1
     while True:
         q = f"SELECT {columns} FROM {entity} STARTPOSITION {start} MAXRESULTS 1000"
-        r = requests.get(_qb_realm_url("query"), headers=_qb_headers(), params={"query": q})
+        r = requests.get(_qb_realm_url("query"), headers=_qb_headers(),
+                          params={"query": q, "minorversion": QB_MINOR_VERSION})
         if not r.ok:
             app.logger.warning("QuickBooks query failed [%s]: %s | response: %s", r.status_code, q, r.text[:1000])
         r.raise_for_status()
@@ -592,7 +597,8 @@ def auth_quickbooks_callback():
         _qb_tokens['realm_id']      = realm_id
 
         try:
-            cr = requests.get(_qb_realm_url("companyinfo", realm_id), headers=_qb_headers())
+            cr = requests.get(_qb_realm_url("companyinfo", realm_id), headers=_qb_headers(),
+                               params={"minorversion": QB_MINOR_VERSION})
             cr.raise_for_status()
             _qb_tokens['company_name'] = (cr.json().get("CompanyInfo") or {}).get("CompanyName", "")
         except Exception:
@@ -706,7 +712,8 @@ def quickbooks_export():
                     for j, inv in enumerate(batch)
                 ]
             }
-            r = requests.post(_qb_realm_url("batch"), headers=_qb_headers(), json=batch_body)
+            r = requests.post(_qb_realm_url("batch"), headers=_qb_headers(), json=batch_body,
+                               params={"minorversion": QB_MINOR_VERSION})
             if r.ok:
                 result = r.json()
                 for item in result.get("BatchItemResponse", []):
