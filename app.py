@@ -252,8 +252,17 @@ def _fetch_qb_items():
 
 
 def _fetch_qb_customer_currencies():
-    """Return {customer_id: currency_code} for every Customer in the QuickBooks company."""
-    customers = _qb_query_all("Customer", "Id, CurrencyRef")
+    """Return {customer_id: currency_code} for every Customer in the QuickBooks company.
+
+    CurrencyRef is only a queryable field when multi-currency is enabled on the
+    company — if it's not, QBO returns a 400 rather than just empty values.
+    Treat that as "everyone's on the home currency" instead of failing the export.
+    """
+    try:
+        customers = _qb_query_all("Customer", "Id, CurrencyRef")
+    except requests.HTTPError:
+        app.logger.info("QuickBooks Customer.CurrencyRef query failed — assuming multi-currency is off")
+        return {}
     out = {}
     for c in customers:
         cur = (c.get("CurrencyRef") or {}).get("value")
