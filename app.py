@@ -36,6 +36,12 @@ QB_ENVIRONMENT   = os.environ.get('QB_ENVIRONMENT', 'sandbox').strip().lower()
 # Set QB_AMOUNTS_IN_PENCE=false if your SalonIQ data already stores amounts in pounds
 QB_AMOUNTS_IN_PENCE = os.environ.get('QB_AMOUNTS_IN_PENCE', 'true').lower() != 'false'
 
+# Names of the QuickBooks Tax Codes (Settings > Taxes in QBO) to apply to invoice lines.
+# Looked up by name at export time and resolved to a TaxCodeRef — override if your
+# company's codes are named differently than QBO's UK defaults.
+QB_VAT_TAX_CODE    = os.environ.get('QB_VAT_TAX_CODE', '20.0% S')
+QB_NO_VAT_TAX_CODE = os.environ.get('QB_NO_VAT_TAX_CODE', 'No VAT')
+
 QB_AUTH_URL   = "https://appcenter.intuit.com/connect/oauth2"
 QB_TOKEN_URL  = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 QB_REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
@@ -251,6 +257,12 @@ def _fetch_qb_items():
     return {i["Name"]: i["Id"] for i in items}
 
 
+def _fetch_qb_tax_codes():
+    """Return {tax_code_name: tax_code_id} for every TaxCode in the QuickBooks company."""
+    codes = _qb_query_all("TaxCode", "Id, Name")
+    return {c["Name"]: c["Id"] for c in codes}
+
+
 def _fetch_qb_customer_currencies():
     """Return {customer_id: currency_code} for every Customer in the QuickBooks company.
 
@@ -305,15 +317,17 @@ _MONTH_NAMES = ['January','February','March','April','May','June',
 
 
 def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_year=0,
-                               contact_currency=None, item_ids=None):
+                               contact_currency=None, item_ids=None, tax_code_ids=None):
     """Map a SalonIQ invoice row to a QuickBooks Online Invoice dict using the source config.
 
     Raises ValueError (with a user-facing message) if the row can't be mapped —
-    e.g. no QuickBooksClientId, or a required Item hasn't been created in QuickBooks yet.
+    e.g. no QuickBooksClientId, a required Item hasn't been created in QuickBooks yet,
+    or the configured Tax Code name doesn't exist in the company.
     """
     if source_cfg is None:
         source_cfg = INVOICE_SOURCES['stripe']
-    item_ids = item_ids or {}
+    item_ids     = item_ids or {}
+    tax_code_ids = tax_code_ids or {}
 
     customer_id = str(row.get('QuickBooksClientId') or row.get('QUICKBOOKSCLIENTID') or '').strip()
     if not customer_id:
@@ -358,6 +372,15 @@ def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_yea
     # AccountCode (e.g. ABS003) used as the QuickBooks invoice DocNumber
     reference = str(row.get('AccountCode') or row.get('ACCOUNTCODE') or '')
 
+    # QBO requires a TaxCodeRef on every line once the company has tax tracking on.
+    # Standard-rate lines are stored net (see `amount` above) and QBO adds VAT on
+    # top when saved, matching the old Xero "VAT-exclusive, provider adds VAT" setup.
+    tax_code_name = QB_VAT_TAX_CODE if is_gbp else QB_NO_VAT_TAX_CODE
+    tax_code_id   = tax_code_ids.get(tax_code_name)
+    if not tax_code_id:
+        available = ', '.join(sorted(tax_code_ids)) or '(none returned by QuickBooks)'
+        raise ValueError(f"QuickBooks Tax Code '{tax_code_name}' not found. Available: {available}")
+
     def qb_line(code, unit_amount, description=None):
         item_id = item_ids.get(code)
         if not item_id:
@@ -369,6 +392,7 @@ def map_to_quickbooks_invoice(row, source_cfg=None, invoice_month=0, invoice_yea
                 "ItemRef": {"value": item_id, "name": code},
                 "Qty": 1.0,
                 "UnitPrice": unit_amount,
+                "TaxCodeRef": {"value": tax_code_id},
             },
         }
         if description:
@@ -635,8 +659,9 @@ def quickbooks_export():
         return jsonify({"error": "No invoices provided"}), 400
 
     try:
-        item_ids          = _fetch_qb_items()
-        contact_currency   = _fetch_qb_customer_currencies()
+        item_ids         = _fetch_qb_items()
+        contact_currency = _fetch_qb_customer_currencies()
+        tax_code_ids     = _fetch_qb_tax_codes()
 
         qb_invs = []
         errors  = []
@@ -645,7 +670,7 @@ def quickbooks_export():
             try:
                 qb_invs.append(map_to_quickbooks_invoice(
                     row, source_cfg, invoice_month=invoice_month, invoice_year=invoice_year,
-                    contact_currency=contact_currency, item_ids=item_ids,
+                    contact_currency=contact_currency, item_ids=item_ids, tax_code_ids=tax_code_ids,
                 ))
             except ValueError as e:
                 errors.append(f"{ref}: {e}")
